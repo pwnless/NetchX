@@ -1,0 +1,53 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using NetchX.Interfaces;
+using NetchX.Models;
+using NetchX.Utils;
+
+namespace NetchX.Servers;
+
+public class SSHUtil : IServerUtil
+{
+    public ushort Priority { get; } = 4;
+
+    public string TypeName { get; } = "SSH";
+
+    public string FullName { get; } = "SSH";
+
+    public string ShortName { get; } = "SSH";
+
+    public string[] UriScheme { get; } = { "ssh" };
+
+    public Type ServerType { get; } = typeof(SSHServer);
+
+    public void Edit(Server s)
+    {
+        new SSHForm((SSHServer)s).ShowDialog();
+    }
+
+    public void Create()
+    {
+        new SSHForm().ShowDialog();
+    }
+
+    public string GetShareLink(Server s)
+    {
+        throw new NotSupportedException("SSH standard share links are not implemented. Use the Ctrl-copy NetchX link instead.");
+    }
+
+    public IServerController GetController()
+    {
+        return new LegacyV2rayController();
+    }
+
+    public IEnumerable<Server> ParseUri(string text)
+    {
+        throw new NotSupportedException("SSH standard share links are not implemented.");
+    }
+
+    public bool CheckServer(Server s)
+    {
+        return true;
+    }
+}

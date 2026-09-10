@@ -7,7 +7,7 @@ if (Test-Path -LiteralPath $goBin) {
     $Env:Path = "$goBin;$Env:Path"
 }
 
-$fallback = 'D:\Netch\bin\v2ray-sn.exe'
+$fallback = 'D:\NetchX\bin\v2ray-sn.exe'
 $expectedFallbackHash = 'a219f435671fb214c0c530084c65e576fdc1404f40b187b5586e869d2a3e4dff'
 
 function Stage-LegacyFallback {
@@ -23,8 +23,8 @@ function Stage-LegacyFallback {
     Copy-Item -LiteralPath $fallback -Destination '..\release\v2ray-sn.exe' -Force
 }
 
-if ($Env:NETCH_BUILD_V2RAY_FROM_SOURCE -ne '1') {
-    Write-Warning 'Staging the local v2ray-sn fallback. Set NETCH_BUILD_V2RAY_FROM_SOURCE=1 to rebuild its legacy fork from source.'
+if ($Env:NETCHX_BUILD_V2RAY_FROM_SOURCE -ne '1') {
+    Write-Warning 'Staging the local v2ray-sn fallback. Set NETCHX_BUILD_V2RAY_FROM_SOURCE=1 to rebuild its legacy fork from source.'
     Stage-LegacyFallback
     exit 0
 }

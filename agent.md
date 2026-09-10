@@ -1,17 +1,17 @@
-# Netch Architecture and Maintenance Guide
+# NetchX Architecture and Maintenance Guide
 
 This document describes the current codebase and the constraints that apply when changing it. It is intended for maintainers and automation agents. It covers the .NET 10 application, the native forwarding components, the supported runtime payload, and the release process.
 
 ## 1. Project profile
 
-Netch is a Windows x64 proxy client. The WinForms application selects a server and a traffic mode. The selected mode forwards traffic to either a directly configured SOCKS5 server or a local SOCKS5 endpoint provided by a protocol controller.
+NetchX is a Windows x64 proxy client. The WinForms application selects a server and a traffic mode. The selected mode forwards traffic to either a directly configured SOCKS5 server or a local SOCKS5 endpoint provided by a protocol controller.
 
 The current release line is `2.0.1`:
 
-- `Netch/Netch.csproj` targets `net10.0-windows` and carries matching package metadata.
+- `NetchX/NetchX.csproj` targets `net10.0-windows` and carries matching package metadata.
 - `common.props` defines `net10.0-windows`, `win-x64`, C# `latest`, and nullable-reference support for SDK-style projects.
-- `Netch/Controllers/UpdateChecker.cs` contains the displayed and release-comparison version.
-- `Netch/Properties/AssemblyInfo.cs` supplies the effective PE assembly, file, and informational versions because `GenerateAssemblyInfo` is disabled.
+- `NetchX/Controllers/UpdateChecker.cs` contains the displayed and release-comparison version.
+- `NetchX/Properties/AssemblyInfo.cs` supplies the effective PE assembly, file, and informational versions because `GenerateAssemblyInfo` is disabled.
 
 When changing the version, update all of these values together. The currently published executable reports assembly and file version `2.0.1.0` and product version `2.0.1`.
 
@@ -21,7 +21,7 @@ The main application is Per-Monitor V2 DPI aware. `Program.Main` must call `Appl
 
 | Path | Purpose |
 | --- | --- |
-| `Netch/` | .NET 10 WinForms application: forms, configuration, models, controllers, protocol support, P/Invoke, and resources. |
+| `NetchX/` | .NET 10 WinForms application: forms, configuration, models, controllers, protocol support, P/Invoke, and resources. |
 | `Tests/` | MSTest managed regression project targeting `net10.0-windows`. |
 | `Redirector/` | Native C++20 NetFilter integration and SOCKS5 TCP, UDP, DNS, and ICMP forwarding. It builds `Redirector.bin` and `nfapi.dll`. |
 | `Redirector/Tests/` | Standalone native regression sources for Redirector. They are not included by `Redirector.vcxproj`. |
@@ -52,9 +52,9 @@ WinForms UI
 
 `MainController` owns the active server, mode, server controller, mode controller, and SOCKS5 endpoint. An `AsyncSemaphore` serializes startup and shutdown. If startup fails while the semaphore is held, `StartAsync` calls its private `StopCoreAsync` method before releasing the semaphore. Do not replace that with the public `StopAsync` method: releasing the semaphore first can let another startup install controllers that the failed startup then stops.
 
-Startup resolves the server hostname, warms the configured STUN hostname lookup, adds Netch firewall rules, chooses a mode controller, and frees a conflicting application-owned TCP listener if needed. A directly selected SOCKS5 server is used when its authentication requirements are compatible with the selected mode. Other compatible server types start `XrayController`, except SSH and ShadowsocksR, which start `LegacyV2rayController`; both expose a local SOCKS5 endpoint for the mode.
+Startup resolves the server hostname, warms the configured STUN hostname lookup, adds NetchX firewall rules, chooses a mode controller, and frees a conflicting application-owned TCP listener if needed. A directly selected SOCKS5 server is used when its authentication requirements are compatible with the selected mode. Other compatible server types start `XrayController`, except SSH and ShadowsocksR, which start `LegacyV2rayController`; both expose a local SOCKS5 endpoint for the mode.
 
-`Other/xray/build.ps1` stages `xray.exe`, `geoip.dat`, and `geosite.dat` from the sibling `../xray-core/release` checkout, from `NETCH_XRAY_RELEASE` when supplied, or by downloading the pinned Xray 26.3.27 Windows archive when neither is available (the CI path). It verifies the archive and every staged file. `XrayController` runs `bin/xray.exe` with the generated configuration. The Xray configuration generator uses current `method` fields (`raw`, `xhttp`, `mkcp`, `grpc`, `websocket`, `httpupgrade`, and `hysteria`) and supports TLS, REALITY, and VLESS XTLS Vision. The VLESS and VMess editors expose those Xray transports, XHTTP mode, TLS/REALITY fingerprint, REALITY keys, short ID, SpiderX, ML-DSA-65 verify key, and Hysteria 2 auth; VLESS also exposes the Vision flow selector. It maps persisted `tcp`, `kcp`, and `ws` aliases to their current methods; Xray has removed legacy HTTP/2, QUIC, and standalone `xtls` security. REALITY is limited to RAW, XHTTP, and gRPC, while Vision is limited to VLESS over RAW with TLS or REALITY. `Other/v2ray-sn/build.ps1` stages the separately pinned legacy SagerNet executable for SSH and ShadowsocksR only. Its `LegacyV2rayConfigUtils` must remain limited to those two unsupported Xray outbounds; do not add modern transports or Xray features to it.
+`Other/xray/build.ps1` stages `xray.exe`, `geoip.dat`, and `geosite.dat` from the sibling `../xray-core/release` checkout, from `NETCHX_XRAY_RELEASE` when supplied, or by downloading the pinned Xray 26.3.27 Windows archive when neither is available (the CI path). It verifies the archive and every staged file. `XrayController` runs `bin/xray.exe` with the generated configuration. The Xray configuration generator uses current `method` fields (`raw`, `xhttp`, `mkcp`, `grpc`, `websocket`, `httpupgrade`, and `hysteria`) and supports TLS, REALITY, and VLESS XTLS Vision. The VLESS and VMess editors expose those Xray transports, XHTTP mode, TLS/REALITY fingerprint, REALITY keys, short ID, SpiderX, ML-DSA-65 verify key, and Hysteria 2 auth; VLESS also exposes the Vision flow selector. It maps persisted `tcp`, `kcp`, and `ws` aliases to their current methods; Xray has removed legacy HTTP/2, QUIC, and standalone `xtls` security. REALITY is limited to RAW, XHTTP, and gRPC, while Vision is limited to VLESS over RAW with TLS or REALITY. `Other/v2ray-sn/build.ps1` stages the separately pinned legacy SagerNet executable for SSH and ShadowsocksR only. Its `LegacyV2rayConfigUtils` must remain limited to those two unsupported Xray outbounds; do not add modern transports or Xray features to it.
 
 Shutdown stops the server and mode controllers together, clears the status-port text, and finally clears all active controller references. Mode implementations must not create competing global lifecycle state.
 
@@ -62,9 +62,9 @@ Shutdown stops the server and mode controllers together, clears the status-port 
 
 ### ProcessMode
 
-`NFController` configures and starts `bin/Redirector.bin` through `Netch/Interops/Redirector.cs`. It merges ProcessMode settings with global Redirector settings, configures DNS and SOCKS5 properties, validates native regular expressions, and installs or updates the `netfilter2` driver when necessary.
+`NFController` configures and starts `bin/Redirector.bin` through `NetchX/Interops/Redirector.cs`. It merges ProcessMode settings with global Redirector settings, configures DNS and SOCKS5 properties, validates native regular expressions, and installs or updates the `netfilter2` driver when necessary.
 
-Process rules are passed to the native component as handle and bypass regular expressions. Netch's own installation directory is always bypassed. The native component also excludes its own process ID, so a realistic ProcessMode test must originate traffic from a separate target process.
+Process rules are passed to the native component as handle and bypass regular expressions. NetchX's own installation directory is always bypassed. The native component also excludes its own process ID, so a realistic ProcessMode test must originate traffic from a separate target process.
 
 The `Redirector.bin` C ABI is:
 
@@ -76,20 +76,20 @@ The `Redirector.bin` C ABI is:
 | `aio_free` | Stop workers, drain I/O, and release the SDK. |
 | `aio_getUP` and `aio_getDL` | Return Redirector traffic counters. |
 
-The `AIO_TYPE` order must stay synchronized across `Redirector/Based.h`, `Redirector/Redirector.cpp`, and `Netch/Interops/Redirector.cs`.
+The `AIO_TYPE` order must stay synchronized across `Redirector/Based.h`, `Redirector/Redirector.cpp`, and `NetchX/Interops/Redirector.cs`.
 
 ### TunMode
 
 `TUNController` starts `bin/tun2socks.exe` 2.7 using argument-safe `ProcessStartInfo.ArgumentList` values:
 
 ```text
---device tun://netch
+--device tun://netchx
 --proxy socks5://[credentials@]host:port
 --mtu 1500
 --loglevel warn
 ```
 
-It waits for the `netch` Wintun interface, obtains its interface index, assigns its IPv4 address through `RouteHelper.bin`, and installs the necessary route rules. The controller records whether the route context was successfully created, allowing startup cleanup to avoid deleting routes from uninitialized state.
+It waits for the `netchx` Wintun interface, obtains its interface index, assigns its IPv4 address through `RouteHelper.bin`, and installs the necessary route rules. The controller records whether the route context was successfully created, allowing startup cleanup to avoid deleting routes from uninitialized state.
 
 `bin/wintun.dll` is application-local and is loaded by tun2socks. Do not copy it to, overwrite it in, or otherwise depend on `System32`. Wintun 0.14.1 is intentionally paired with tun2socks 2.7; it is not compatible with the obsolete `tun2socks.bin` integration.
 
@@ -216,7 +216,7 @@ The script deletes and recreates the selected output directory, so only pass an 
 1. Creates the release layout and copies `Storage` assets, including `i18n`, `mode`, the driver, DNS files, and `Storage/README.md`.
 2. Uses a root `Country.mmdb` when present; otherwise downloads the current GeoIP asset and validates its release metadata.
 3. Runs `Other/build.ps1`, which stages the required external binaries.
-4. Publishes Netch as a self-contained, single-file `win-x64` executable.
+4. Publishes NetchX as a self-contained, single-file `win-x64` executable.
 5. Builds Redirector and RouteHelper in Release x64 configuration.
 6. Verifies that all required release files are present and removes root-level PDB and XML files for Release output.
 
@@ -233,7 +233,7 @@ Do not replace one of these binaries without reviewing compatibility, updating i
 To create a GitHub Release archive after a successful build:
 
 ```powershell
-$archive = Join-Path (Get-Location) 'build\Netch-2.0.1-win-x64.zip'
+$archive = Join-Path (Get-Location) 'build\NetchX-2.0.1-win-x64.zip'
 $items = Get-ChildItem -LiteralPath .\build -Force | Where-Object { $_.FullName -ne $archive } | Select-Object -ExpandProperty FullName
 Compress-Archive -LiteralPath $items -DestinationPath $archive -CompressionLevel Optimal
 Get-FileHash -LiteralPath $archive -Algorithm SHA256

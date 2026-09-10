@@ -3,7 +3,7 @@
     "Information": "情報",
     "Error": "エラー",
 
-    "If this is your first time using this software,\n please check https://netch.org to install supports first,\n or the program may report errors.": "このソフトウェアを初めて使用する場合、\nhttps://netch.orgから必要要件(.NET Framework 4.8)をインストールしてください。\n",
+    "If this is your first time using this software,\n please check https://github.com/pwnless/NetchX to install supports first,\n or the program may report errors.": "このソフトウェアを初めて使用する場合、\nhttps://github.com/pwnless/NetchXから必要要件(.NET Framework 4.8)をインストールしてください。\n",
     "Missing File or runtime components": "必要なファイルまたはランタイムが見つかりません。",
     "Please extract all files then run the program!": "すべてのファイルを抽出するとプログラムが実行できます！",
 
@@ -11,7 +11,7 @@
     "Stop": "停止",
     "Waiting for command": "待機中",
     "Starting": "起動しています",
-    "Start failed": "起動中にエラーが発生しました。Netchが配置されているディレクトリのloggingフォルダ内のログを確認してください。",
+    "Start failed": "起動中にエラーが発生しました。NetchXが配置されているディレクトリのloggingフォルダ内のログを確認してください。",
     "Started": "起動しました",
     "Stopping": "停止中",
     "Stopped": "停止しました",
@@ -27,7 +27,7 @@
     "Server": "サーバー",
     "Import Servers From Clipboard": "クリップボードからサーバー設定をインポートする",
     "Add [{0}] Server": "[{0}] サーバーを追加",
-    "Netch is now minimized to the notification bar, double click this icon to restore.": "Netchが通知バーに最小化されました。このアイコンをダブルクリックして復元します。",
+    "NetchX is now minimized to the notification bar, double click this icon to restore.": "NetchXが通知バーに最小化されました。このアイコンをダブルクリックして復元します。",
     "New version available": "新しいバージョンがあります",
     "Already latest version": "すでに最新バージョンです",
     "New version found failed": "新しいバージョンが見つかりませんでした",
@@ -89,7 +89,7 @@
     "Modes have been reload": "モードリストをリロードされました",
     "Clean DNS Cache": "DNSキャッシュを削除",
     "DNS cache cleanup succeeded": "DNSキャッシュが削除されました",
-    "Remove Netch Firewall Rules": "Netch ファイアウォール規則を削除",
+    "Remove NetchX Firewall Rules": "NetchX ファイアウォール規則を削除",
 	
     "Update PAC": "PAC規則を更新",
     "PAC updated successfully": "PACを更新完了",
@@ -104,7 +104,7 @@
 
     "About": "バージョン情報",
     "FAQ": "よくある質問",
-    "Telegram Channel": "Telegram チャンネル",
+    "GitHub Repository": "GitHub リポジトリ",
     "Sponsor": "スポンサー",
 
     "Configuration": "設定情報",

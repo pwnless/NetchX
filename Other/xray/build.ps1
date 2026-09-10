@@ -18,10 +18,10 @@ try {
     # Use an explicitly supplied release directory first, then the sibling
     # checkout. CI has neither, so download this exact audited release.
     $downloadDirectory = $null
-    if (-not [string]::IsNullOrWhiteSpace($Env:NETCH_XRAY_RELEASE)) {
-        $releasePath = [IO.Path]::GetFullPath($Env:NETCH_XRAY_RELEASE)
+    if (-not [string]::IsNullOrWhiteSpace($Env:NETCHX_XRAY_RELEASE)) {
+        $releasePath = [IO.Path]::GetFullPath($Env:NETCHX_XRAY_RELEASE)
         if (-not (Test-Path -LiteralPath $releasePath -PathType Container)) {
-            throw "NETCH_XRAY_RELEASE does not exist: $releasePath"
+            throw "NETCHX_XRAY_RELEASE does not exist: $releasePath"
         }
     }
     else {

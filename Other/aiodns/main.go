@@ -148,7 +148,7 @@ func handleServerName(w dns.ResponseWriter, m *dns.Msg) {
 	r.SetReply(m)
 
 	for i := 0; i < len(m.Question); i++ {
-		rr, err := dns.NewRR(fmt.Sprintf("%s PTR Netch", m.Question[i].Name))
+		rr, err := dns.NewRR(fmt.Sprintf("%s PTR NetchX", m.Question[i].Name))
 		if err != nil {
 			fmt.Printf("[aiodns][dns.NewRR] %v\n", err)
 			return

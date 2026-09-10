@@ -14,7 +14,7 @@ body:
     attributes:
       label: 复现步骤
       placeholder: |
-        1. 打开 Netch 软件
+        1. 打开 NetchX 软件
         2. ...
     validations:
       required: true

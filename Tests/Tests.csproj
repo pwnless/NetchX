@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Netch\Netch.csproj" />
+    <ProjectReference Include="..\NetchX\NetchX.csproj" />
   </ItemGroup>
 
 </Project>

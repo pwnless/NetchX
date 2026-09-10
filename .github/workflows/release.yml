@@ -16,7 +16,7 @@ jobs:
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
-      NETCH_BUILD_V2RAY_FROM_SOURCE: "1"
+      NETCHX_BUILD_V2RAY_FROM_SOURCE: "1"
 
     steps:
       - name: Check out source
@@ -25,7 +25,7 @@ jobs:
       - name: Verify release tag
         shell: pwsh
         run: |
-          $source = Get-Content -LiteralPath .\Netch\Controllers\UpdateChecker.cs -Raw
+          $source = Get-Content -LiteralPath .\NetchX\Controllers\UpdateChecker.cs -Raw
           $assemblyVersion = [regex]::Match($source, 'AssemblyVersion\s*=\s*@"(?<value>[^"]+)"')
           $suffix = [regex]::Match($source, 'private const string Suffix\s*=\s*@"(?<value>[^"]*)"')
           if (-not $assemblyVersion.Success -or -not $suffix.Success) {
@@ -88,7 +88,7 @@ jobs:
         shell: pwsh
         run: |
           $requiredFiles = @(
-            'Netch.exe',
+            'NetchX.exe',
             'bin\Redirector.bin',
             'bin\RouteHelper.bin',
             'bin\nfapi.dll',
@@ -112,9 +112,9 @@ jobs:
         id: package
         shell: pwsh
         run: |
-          $archive = "Netch-$env:RELEASE_VERSION-win-x64.zip"
-          $packageRoot = Join-Path $env:RUNNER_TEMP 'netch-release-package'
-          $payloadRoot = Join-Path $packageRoot 'Netch'
+          $archive = "NetchX-$env:RELEASE_VERSION-win-x64.zip"
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'netchx-release-package'
+          $payloadRoot = Join-Path $packageRoot 'NetchX'
           New-Item -ItemType Directory -Path $payloadRoot -Force | Out-Null
           Copy-Item -Path .\release\* -Destination $payloadRoot -Recurse -Force
           Compress-Archive -LiteralPath $payloadRoot -DestinationPath $archive -CompressionLevel Optimal
@@ -130,8 +130,6 @@ jobs:
           draft: false
           files: ${{ steps.package.outputs.archive }}
           body: |
-            [![](https://img.shields.io/badge/Telegram-Channel-blue)](https://t.me/netch_channel) [![](https://img.shields.io/badge/Telegram-Group-green)](https://t.me/netch_group)
-
             ## Changelog
 
             This release was built and verified by GitHub Actions.

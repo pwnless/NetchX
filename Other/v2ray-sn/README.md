@@ -1,4 +1,4 @@
-# Project V for SagerNet for Netch
+# Project V for SagerNet for NetchX
 This is not a joke.  
 Modified from [SagerNet/v2ray-core](https://github.com/SagerNet/v2ray-core).  
 #### Extends all features of SagerNet/v2ray-core

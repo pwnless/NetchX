@@ -94,7 +94,7 @@ cp -Force '.\Other\release\*.exe' "$OutputPath\bin"
 cp -Force '.\Other\release\*.dat' "$OutputPath\bin"
 
 Write-Host
-Write-Host 'Building Netch'
+Write-Host 'Building NetchX'
 
 dotnet publish `
 	-c $Configuration `
@@ -106,10 +106,10 @@ dotnet publish `
 	-p:PublishReadyToRun=$PublishReadyToRun `
 	-p:PublishReadyToRunShowWarnings=$PublishReadyToRun `
 	-p:IncludeNativeLibrariesForSelfExtract=$SelfContained `
-	-o ".\Netch\bin\$Configuration" `
-	'.\Netch\Netch.csproj'
+	-o ".\NetchX\bin\$Configuration" `
+	'.\NetchX\NetchX.csproj'
 if ( -Not $? ) { exit $lastExitCode }
-cp -Force ".\Netch\bin\$Configuration\Netch.exe" $OutputPath
+cp -Force ".\NetchX\bin\$Configuration\NetchX.exe" $OutputPath
 
 Write-Host
 Write-Host 'Building Redirector'
@@ -133,7 +133,7 @@ if ( -Not $? ) { exit $lastExitCode }
 cp -Force ".\RouteHelper\bin\$Configuration\RouteHelper.bin" "$OutputPath\bin"
 
 $requiredFiles = @(
-    'Netch.exe',
+    'NetchX.exe',
     'bin\Redirector.bin',
     'bin\RouteHelper.bin',
     'bin\nfapi.dll',

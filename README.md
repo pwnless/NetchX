@@ -1,29 +1,25 @@
-# Netch
+# NetchX
 
 <p align="center">
-  <img src="https://github.com/NetchX/Netch/blob/main/Netch/Resources/Netch.png?raw=true" width="128" alt="Netch logo" />
+  <img src="https://github.com/pwnless/NetchX/blob/main/NetchX/Resources/NetchX.png?raw=true" width="128" alt="NetchX logo" />
 </p>
 
 <p align="center">A Windows x64 proxy client with process-based, virtual-adapter, and network-sharing traffic modes.</p>
 
 <p align="center">
-  <a href="https://github.com/NetchX/Netch/releases"><img src="https://img.shields.io/github/v/release/NetchX/Netch?style=flat-square" alt="GitHub release" /></a>
+  <a href="https://github.com/pwnless/NetchX/releases"><img src="https://img.shields.io/github/v/release/pwnless/NetchX?style=flat-square" alt="GitHub release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square" alt="GPL-3.0 license" /></a>
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet" alt=".NET 10" />
   <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?style=flat-square&logo=windows" alt="Windows x64" />
 </p>
 
 <p align="center">
-  <a href="https://t.me/netch_group">Telegram Group</a>
-  ·
-  <a href="https://t.me/netch_channel">Telegram Channel</a>
-  ·
   <a href="#quick-start">Quick start</a>
   ·
   <a href="#whats-new-since-197">1.9.7 → 2.0.0</a>
 </p>
 
-> The current release line is **2.0.1**. It retains Netch's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
+> The current release line is **2.0.1**. It retains NetchX's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
 
 ## What's new since 1.9.7
 
@@ -75,13 +71,13 @@ Xray-core is the bundled runtime for all Xray-supported profiles. ShadowsocksR a
 
 VLESS and VMess editors expose Xray's current `raw`, `xhttp`, `mkcp`, `grpc`, `websocket`, `httpupgrade`, and `hysteria` transports. VLESS also exposes the XTLS Vision flows. REALITY profiles require a server name, public key, fingerprint, and optional short ID and SpiderX; Xray permits REALITY only with RAW, XHTTP, or gRPC. Vision requires VLESS over RAW with TLS or REALITY.
 
-Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transport names. Legacy HTTP/2, QUIC, and standalone `xtls` security have been removed by Xray-core, so Netch asks users to migrate those profiles to XHTTP, Hysteria, or TLS/REALITY with Vision as appropriate.
+Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transport names. Legacy HTTP/2, QUIC, and standalone `xtls` security have been removed by Xray-core, so NetchX asks users to migrate those profiles to XHTTP, Hysteria, or TLS/REALITY with Vision as appropriate.
 
 ## Quick start
 
-1. Download `Netch-2.0.1-win-x64.zip` for your system from [Releases](https://github.com/NetchX/Netch/releases).
-2. **Extract the entire archive** to a writable directory. `bin`, `i18n`, and `mode` alongside `Netch.exe` are required at runtime.
-3. Run `Netch.exe` as an administrator, add or import a server, select a mode, and start it.
+1. Download `NetchX-2.0.1-win-x64.zip` for your system from [Releases](https://github.com/pwnless/NetchX/releases).
+2. **Extract the entire archive** to a writable directory. `bin`, `i18n`, and `mode` alongside `NetchX.exe` are required at runtime.
+3. Run `NetchX.exe` as an administrator, add or import a server, select a mode, and start it.
 
 `ProcessMode` requires NetFilter driver privileges. `TunMode` creates and configures a virtual adapter and routes. `ShareMode` requires an available Npcap/WinPcap-compatible interface. Save the configuration of other VPN or proxy tools first: running multiple tools that modify routes and DNS simultaneously can produce unexpected results.
 
@@ -102,7 +98,7 @@ Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transpor
 
 The script publishes the main application, builds `Redirector` and `RouteHelper`, stages external components, and verifies critical package files. The result is written to `build\`.
 
-The Xray staging script uses the checked-out sibling release at `..\xray-core\release` by default. When that directory is absent—such as on GitHub Actions—it downloads the pinned Xray 26.3.27 Windows archive and verifies both the archive and its extracted runtime files. Set `NETCH_XRAY_RELEASE` to another extracted, hash-pinned Xray release directory when building elsewhere.
+The Xray staging script uses the checked-out sibling release at `..\xray-core\release` by default. When that directory is absent—such as on GitHub Actions—it downloads the pinned Xray 26.3.27 Windows archive and verifies both the archive and its extracted runtime files. Set `NETCHX_XRAY_RELEASE` to another extracted, hash-pinned Xray release directory when building elsewhere.
 
 ### Run managed regression tests
 
@@ -121,10 +117,6 @@ Before a production release, validate the following in the target network enviro
 - Layout at 100%, 150%, and 200% DPI, including moves between monitors.
 - The SOCKS UDP TCP control/keepalive connection is still per endpoint; moving it to a shared event-driven model remains future performance work.
 
-## License and acknowledgements
+## License
 
-Netch is distributed under the [GPL-3.0](LICENSE) license.
-
-Thanks to [JetBrains](https://www.jetbrains.com/?from=Netch) for supporting open-source projects.
-
-<a href="https://www.jetbrains.com/?from=Netch"><img src="jetbrains.svg" alt="JetBrains" width="200" /></a>
+NetchX is distributed under the [GPL-3.0](LICENSE) license.

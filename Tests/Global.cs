@@ -6,11 +6,11 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Netch.Controllers;
-using Netch.Models.GitHubRelease;
-using Netch.Models;
-using Netch.Servers;
-using Netch.Utils;
+using NetchX.Controllers;
+using NetchX.Models.GitHubRelease;
+using NetchX.Models;
+using NetchX.Servers;
+using NetchX.Utils;
 
 namespace Tests;
 
@@ -44,7 +44,7 @@ public class Global
     }
 
     [TestMethod]
-    public void NetchLinkRoundTripsDerivedServerFieldsAndNumericPort()
+    public void NetchXLinkRoundTripsDerivedServerFieldsAndNumericPort()
     {
         Server source = new WireGuardServer
         {
@@ -59,7 +59,7 @@ public class Global
             MTU = 1280
         };
 
-        var link = ShareLink.GetNetchLink(source);
+        var link = ShareLink.GetNetchXLink(source);
         var parsed = ShareLink.ParseText(link).Single();
 
         Assert.IsInstanceOfType<WireGuardServer>(parsed);
@@ -72,24 +72,43 @@ public class Global
     }
 
     [TestMethod]
+    public void LegacyNetchShareLinksRemainImportable()
+    {
+        Server source = new Socks5Server
+        {
+            Hostname = "legacy.example.test",
+            Port = 1080,
+            Remark = "Legacy link"
+        };
+
+        var currentLink = ShareLink.GetNetchXLink(source);
+        var legacyLink = "Netch://" + currentLink["NetchX://".Length..];
+        var parsed = ShareLink.ParseText(legacyLink).Single();
+
+        Assert.IsInstanceOfType<Socks5Server>(parsed);
+        Assert.AreEqual(source.Hostname, parsed.Hostname);
+        Assert.AreEqual(source.Port, parsed.Port);
+    }
+
+    [TestMethod]
     public void UpdateManifestBindsTheHashToTheMatchingHttpsAsset()
     {
         const string hash = "7f4fd01818936788a7363f4bfd2efac113d42a3e39db7a2aa23bfc6b11e3de19";
         UpdateChecker.LatestRelease = new Release
         {
-            body = $"| 文件名 | SHA256 |\n| :- | :- |\n| Netch.7z | {hash} |",
+            body = $"| 文件名 | SHA256 |\n| :- | :- |\n| NetchX.7z | {hash} |",
             assets = new[]
             {
                 new Asset { name = "other.7z", browser_download_url = "https://example.test/other.7z" },
-                new Asset { name = "Netch.7z", browser_download_url = "https://example.test/Netch.7z" }
+                new Asset { name = "NetchX.7z", browser_download_url = "https://example.test/NetchX.7z" }
             }
         };
 
         var (fileName, actualHash, url) = UpdateChecker.GetLatestUpdateFileNameAndHash();
 
-        Assert.AreEqual("Netch.7z", fileName);
+        Assert.AreEqual("NetchX.7z", fileName);
         Assert.AreEqual(hash, actualHash);
-        Assert.AreEqual("https://example.test/Netch.7z", url);
+        Assert.AreEqual("https://example.test/NetchX.7z", url);
     }
 
     [TestMethod]
@@ -139,7 +158,7 @@ public class Global
         };
 
         var config = await V2rayConfigUtils.GenerateClientConfigAsync(server);
-        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
         using var document = JsonDocument.Parse(json);
         var outbound = document.RootElement.GetProperty("outbounds")[0];
         var streamSettings = outbound.GetProperty("streamSettings");
@@ -211,7 +230,7 @@ public class Global
         };
 
         var config = await V2rayConfigUtils.GenerateClientConfigAsync(server);
-        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
         using var document = JsonDocument.Parse(json);
         var streamSettings = document.RootElement.GetProperty("outbounds")[0].GetProperty("streamSettings");
 
@@ -246,7 +265,7 @@ public class Global
         };
 
         var config = await LegacyV2rayConfigUtils.GenerateClientConfigAsync(server);
-        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
         using var document = JsonDocument.Parse(json);
         var outbound = document.RootElement.GetProperty("outbounds")[0];
         var settings = outbound.GetProperty("settings");
@@ -278,7 +297,7 @@ public class Global
         };
 
         var config = await LegacyV2rayConfigUtils.GenerateClientConfigAsync(server);
-        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
         using var document = JsonDocument.Parse(json);
         var outbound = document.RootElement.GetProperty("outbounds")[0];
         var settings = outbound.GetProperty("settings");

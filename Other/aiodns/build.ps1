@@ -7,7 +7,7 @@ if (Test-Path -LiteralPath $goBin) {
     $Env:Path = "$goBin;$Env:Path"
 }
 
-$fallback = 'D:\Netch\bin\aiodns.bin'
+$fallback = 'D:\NetchX\bin\aiodns.bin'
 if (-not (Get-Command go -ErrorAction SilentlyContinue) -or -not (Get-Command gcc -ErrorAction SilentlyContinue)) {
     if (-not (Test-Path -LiteralPath $fallback)) {
         throw 'AioDNS needs Go plus a GCC-compatible CGO compiler, and no fallback binary is available.'

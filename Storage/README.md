@@ -1,14 +1,14 @@
-# Netch
-Prebuilt runtime binaries and data files distributed with Netch.
+# NetchX
+Prebuilt runtime binaries and data files distributed with NetchX.
 
 ## aiodns
-https://github.com/netchx/netch
+https://github.com/pwnless/NetchX
 
 ## Redirector
-https://github.com/netchx/netch
+https://github.com/pwnless/NetchX
 
 ## RouteHelper
-https://github.com/netchx/netch
+https://github.com/pwnless/NetchX
 
 ## ck-client
 https://github.com/cbeuw/Cloak

@@ -1,0 +1,53 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using NetchX.Interfaces;
+using NetchX.Models;
+using NetchX.Utils;
+
+namespace NetchX.Servers;
+
+public class WireGuardUtil : IServerUtil
+{
+    public ushort Priority { get; } = 4;
+
+    public string TypeName { get; } = "WireGuard";
+
+    public string FullName { get; } = "WireGuard";
+
+    public string ShortName { get; } = "WG";
+
+    public string[] UriScheme { get; } = { "wireguard" };
+
+    public Type ServerType { get; } = typeof(WireGuardServer);
+
+    public void Edit(Server s)
+    {
+        new WireGuardForm((WireGuardServer)s).ShowDialog();
+    }
+
+    public void Create()
+    {
+        new WireGuardForm().ShowDialog();
+    }
+
+    public string GetShareLink(Server s)
+    {
+        throw new NotSupportedException("WireGuard standard share links are not implemented. Use the Ctrl-copy NetchX link instead.");
+    }
+
+    public IServerController GetController()
+    {
+        return new XrayController();
+    }
+
+    public IEnumerable<Server> ParseUri(string text)
+    {
+        throw new NotSupportedException("WireGuard standard share links are not implemented.");
+    }
+
+    public bool CheckServer(Server s)
+    {
+        return true;
+    }
+}

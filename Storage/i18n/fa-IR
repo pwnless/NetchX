@@ -3,7 +3,7 @@
     "Information": "اطلاعات",
     "Error": "خطا",
 
-    "If this is your first time using this software,\n please check https://netch.org to install supports first,\n or the program may report errors.": "If this is your first time using this software,\n please check https://netch.org to install supports first,\n or the program may report errors.",
+    "If this is your first time using this software,\n please check https://github.com/pwnless/NetchX to install supports first,\n or the program may report errors.": "If this is your first time using this software,\n please check https://github.com/pwnless/NetchX to install supports first,\n or the program may report errors.",
     "Missing File or runtime components": "فایل یا اجزای زمان اجرا از دست رفته است",
     "Please extract all files then run the program!": "لطفا تمام فایل ها را استخراج کنید سپس برنامه را اجرا کنید!",
 
@@ -27,7 +27,7 @@
     "Server": "سرور",
     "Import Servers From Clipboard": "تنظیمات سرور را از کلیپ بورد وارد کنید",
     "Add [{0}] Server": "سرور [{0}] را اضافه کنید",
-    "Netch is now minimized to the notification bar, double click this icon to restore.": "Netch در نوار اعلان به حداقل رسیده است. برای بازیابی روی این نماد دوبار کلیک کنید.",
+    "NetchX is now minimized to the notification bar, double click this icon to restore.": "NetchX در نوار اعلان به حداقل رسیده است. برای بازیابی روی این نماد دوبار کلیک کنید.",
     "New version available": "نسخه جدید وجود دارد",
     "Already latest version": "در حال حاضر آخرین نسخه است",
     "New version found failed": "نسخه جدیدی پیدا نشد",
@@ -89,7 +89,7 @@
     "Modes have been reload": "لیست حالت دوباره بارگیری شد",
     "Clean DNS Cache": "کش DNS را پاک کنید",
     "DNS cache cleanup succeeded": "کش DNS پاک شد",
-    "Remove Netch Firewall Rules": "قانون نچ فایروال را حذف کنید",
+    "Remove NetchX Firewall Rules": "قانون نچ فایروال را حذف کنید",
 	
     "Update PAC": "قوانین PAC به روز کردن",
     "PAC updated successfully": "PAC به روز شد",
@@ -104,7 +104,7 @@
 
     "About": "اطلاعات نسخه",
     "FAQ": "سوالات متداول",
-    "Telegram Channel": "کانال تلگرام",
+    "GitHub Repository": "مخزن گیت‌هاب",
     "Sponsor": "حامی",
 
     "Configuration": "تنظیم اطلاعات",

@@ -14,7 +14,7 @@ body:
     attributes:
       label: To Reproduce
       placeholder: |
-        1. Open Netch
+        1. Open NetchX
         2. ...
     validations:
       required: true
@@ -32,7 +32,7 @@ body:
       render: txt
       placeholder: |
         - OS: [e.g. Windows 10 x64 Professional Workstation 20H2 19042.928]
-        - Netch Version: [e.g. 1.0.0]
+        - NetchX Version: [e.g. 2.0.1]
     validations:
       required: true
   - type: textarea
