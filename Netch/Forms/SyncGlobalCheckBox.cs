@@ -12,6 +12,8 @@ public class SyncGlobalCheckBox : CheckBox
 
     private bool _globalValue;
 
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool SyncGlobal
     {
         get => _syncGlobal;
@@ -26,6 +28,8 @@ public class SyncGlobalCheckBox : CheckBox
         }
     }
 
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool GlobalValue
     {
         get => _globalValue;
@@ -54,6 +58,8 @@ public class SyncGlobalCheckBox : CheckBox
         base.OnClick(e);
     }
 
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool? Value
     {
         get => _syncGlobal ? null : Checked;

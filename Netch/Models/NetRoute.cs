@@ -39,7 +39,7 @@ public struct NetRoute
         var o = (NetRoute)MemberwiseClone();
         o.Network = network;
         o.Cidr = cidr;
-        //about why metric cannot be ZERO :) https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/route_ws2008
+        // Route metrics cannot be zero. See https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/route_ws2008.
         o.Metric = (int)(metric == null ? 1 : metric);
 
         return o;

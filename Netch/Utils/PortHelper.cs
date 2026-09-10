@@ -30,6 +30,9 @@ public static class PortHelper
 
     internal static IEnumerable<Process> GetProcessByUsedTcpPort(ushort port, AddressFamily inet = AddressFamily.InterNetwork)
     {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(6, 3, 0, 0))
+            throw new PlatformNotSupportedException("Port owner lookup requires Windows 8.1 or later.");
+
         if (port == 0)
             throw new ArgumentOutOfRangeException();
 
@@ -42,22 +45,40 @@ public static class PortHelper
                 {
                     uint err;
                     uint size = 0;
-                    PInvoke.GetExtendedTcpTable(default, ref size, false, (uint)inet, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_LISTENER, 0); // get size
-                    var tcpTable = (MIB_TCPTABLE_OWNER_PID*)Marshal.AllocHGlobal((int)size);
-
-                    if ((err = PInvoke.GetExtendedTcpTable(tcpTable, ref size, false, (uint)inet, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_LISTENER, 0)) !=
-                        0)
+                    err = PInvoke.GetExtendedTcpTable(default, ref size, false, (uint)inet, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_LISTENER, 0); // get size
+                    if (err != 0 && err != 122)
                         throw new Win32Exception((int)err);
 
-                    for (var i = 0; i < tcpTable -> dwNumEntries; i++)
+                    var allocation = Marshal.AllocHGlobal(checked((int)size));
+                    try
                     {
-                        var row = tcpTable -> table.ReadOnlyItemRef(i);
+                        var tcpTable = (MIB_TCPTABLE_OWNER_PID*)allocation;
+                        if ((err = PInvoke.GetExtendedTcpTable(tcpTable, ref size, false, (uint)inet, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_LISTENER, 0)) !=
+                            0)
+                            throw new Win32Exception((int)err);
 
-                        if (row.dwOwningPid is 0 or 4)
-                            continue;
+                        for (var i = 0; i < tcpTable -> dwNumEntries; i++)
+                        {
+                            var row = tcpTable -> table.ReadOnlyItemRef(i);
 
-                        if (PInvoke.ntohs((ushort)row.dwLocalPort) == port)
-                            process.Add(Process.GetProcessById((int)row.dwOwningPid));
+#pragma warning disable CA1416 // ntohs is available on all Windows versions supported by the application.
+                            if (row.dwOwningPid is 0 or 4 || PInvoke.ntohs((ushort)row.dwLocalPort) != port)
+                                continue;
+#pragma warning restore CA1416
+
+                            try
+                            {
+                                process.Add(Process.GetProcessById((int)row.dwOwningPid));
+                            }
+                            catch (ArgumentException)
+                            {
+                                // The owning process exited between the table query and lookup.
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal(allocation);
                     }
                 }
 
@@ -72,7 +93,7 @@ public static class PortHelper
 
     private static void GetReservedPortRange(PortType portType, ref List<NumberRange> targetList)
     {
-        var process = new Process
+        using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
@@ -101,11 +122,11 @@ public static class PortHelper
     }
 
     /// <summary>
-    ///     指定类型的端口是否已经被使用了
+    ///     Checks whether a port of the specified type is already in use.
     /// </summary>
-    /// <param name="port">端口</param>
-    /// <param name="type">检查端口类型</param>
-    /// <returns>是否被占用</returns>
+    /// <param name="port">Port number.</param>
+    /// <param name="type">Port type to check.</param>
+    /// <returns>Whether the port is in use.</returns>
     public static void CheckPort(ushort port, PortType type = PortType.Both)
     {
         switch (type)
@@ -145,7 +166,7 @@ public static class PortHelper
     }
 
     /// <summary>
-    ///     检查端口是否是保留端口
+    ///     Checks whether a port is reserved.
     /// </summary>
     private static void CheckPortReserved(ushort port, PortType type)
     {
@@ -193,7 +214,7 @@ public static class PortHelper
 }
 
 /// <summary>
-///     检查端口类型
+///     Port type to check.
 /// </summary>
 [Flags]
 public enum PortType

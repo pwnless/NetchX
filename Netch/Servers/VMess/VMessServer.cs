@@ -30,57 +30,57 @@ public class VMessServer : Server
     }
 
     /// <summary>
-    ///     用户 ID
+    ///     User ID
     /// </summary>
     public string UserID { get; set; } = string.Empty;
 
     /// <summary>
-    ///     额外 ID
+    ///     Alter ID
     /// </summary>
     public int AlterID { get; set; }
 
     /// <summary>
-    ///     加密方式
+    ///     Encryption method
     /// </summary>
     public virtual string EncryptMethod { get; set; } = VMessGlobal.EncryptMethods[0];
 
     /// <summary>
-    ///     传输协议
+    ///     Transport protocol
     /// </summary>
     public virtual string TransferProtocol { get; set; } = VMessGlobal.TransferProtocols[0];
 
     /// <summary>
-    ///     包传输格式
+    ///     Packet encoding
     /// </summary>
     public virtual string PacketEncoding { get; set; } = VMessGlobal.PacketEncodings[2];
 
     /// <summary>
-    ///     伪装类型
+    ///     Camouflage type
     /// </summary>
     public virtual string FakeType { get; set; } = VMessGlobal.FakeTypes[0];
 
     /// <summary>
-    ///     伪装域名
+    ///     Camouflage host
     /// </summary>
     public string? Host { get; set; }
 
     /// <summary>
-    ///     传输路径
+    ///     Transport path
     /// </summary>
     public string? Path { get; set; }
 
     /// <summary>
-    ///     QUIC 加密方式
+    ///     QUIC encryption method
     /// </summary>
     public string? QUICSecure { get; set; } = VMessGlobal.QUIC[0];
 
     /// <summary>
-    ///     QUIC 加密密钥
+    ///     QUIC encryption key
     /// </summary>
     public string? QUICSecret { get; set; } = string.Empty;
 
     /// <summary>
-    ///     TLS 底层传输安全
+    ///     TLS transport security
     /// </summary>
     public string TLSSecureType
     {
@@ -95,7 +95,7 @@ public class VMessServer : Server
     }
 
     /// <summary>
-    ///     Mux 多路复用
+    ///     Mux multiplexing
     /// </summary>
     public bool? UseMux { get; set; }
 
@@ -128,7 +128,7 @@ public class VMessGlobal
     };
 
     /// <summary>
-    ///     V2Ray 传输协议
+    ///     V2Ray transport protocols
     /// </summary>
     public static readonly List<string> TransferProtocols = new()
     {
@@ -141,7 +141,7 @@ public class VMessGlobal
     };
 
     /// <summary>
-    ///     V2Ray 伪装类型
+    ///     V2Ray camouflage types
     /// </summary>
     public static readonly List<string> FakeTypes = new()
     {
@@ -157,7 +157,7 @@ public class VMessGlobal
     };
 
     /// <summary>
-    ///     TLS 安全类型
+    ///     TLS security types
     /// </summary>
     public static readonly List<string> TLSSecure = new()
     {

@@ -8,7 +8,7 @@ public static class Firewall
     private const string Netch = "Netch";
 
     /// <summary>
-    ///     Netch 自带程序添加防火墙
+    ///     Adds firewall rules for executables shipped with Netch.
     /// </summary>
     public static void AddNetchFwRules()
     {
@@ -20,14 +20,13 @@ public static class Firewall
 
         try
         {
-            var rule = FirewallManager.Instance.Rules.FirstOrDefault(r => r.Name == Netch);
-            if (rule != null)
+            if (!string.Equals(Global.Settings.LocalAddress, "0.0.0.0", StringComparison.Ordinal))
             {
-                if (rule.ApplicationName.StartsWith(Global.NetchDir))
-                    return;
-
                 RemoveNetchFwRules();
+                return;
             }
+
+            RemoveNetchFwRules();
 
             foreach (var path in Directory.GetFiles(Global.NetchDir, "*.exe", SearchOption.AllDirectories))
                 AddFwRule(Netch, path);
@@ -39,7 +38,7 @@ public static class Firewall
     }
 
     /// <summary>
-    ///     清除防火墙规则 (Netch 自带程序)
+    ///     Removes firewall rules for executables shipped with Netch.
     /// </summary>
     public static void RemoveNetchFwRules()
     {
@@ -49,7 +48,7 @@ public static class Firewall
         try
         {
             foreach (var rule in FirewallManager.Instance.Rules.Where(r
-                         => r.ApplicationName?.StartsWith(Global.NetchDir, StringComparison.OrdinalIgnoreCase) ?? r.Name == Netch))
+                         => r.ApplicationName != null ? IsPathUnderDirectory(r.ApplicationName, Global.NetchDir) : r.Name == Netch))
                 FirewallManager.Instance.Rules.Remove(rule);
         }
         catch (Exception e)
@@ -58,7 +57,7 @@ public static class Firewall
         }
     }
 
-    #region 封装
+    #region Helpers
 
     private static void AddFwRule(string ruleName, string exeFullPath)
     {
@@ -66,9 +65,17 @@ public static class Firewall
             exeFullPath,
             FirewallAction.Allow,
             FirewallDirection.Inbound,
-            FirewallProfiles.Private | FirewallProfiles.Public | FirewallProfiles.Domain);
+            FirewallProfiles.Private | FirewallProfiles.Domain);
 
         FirewallManager.Instance.Rules.Add(rule);
+    }
+
+    private static bool IsPathUnderDirectory(string path, string directory)
+    {
+        var relativePath = Path.GetRelativePath(Path.GetFullPath(directory), Path.GetFullPath(path));
+        return !Path.IsPathRooted(relativePath) &&
+               relativePath != ".." &&
+               !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
     }
 
     #endregion

@@ -11,22 +11,22 @@ public class ShadowsocksServer : Server
     }
 
     /// <summary>
-    ///     加密方式
+    ///     Encryption method.
     /// </summary>
     public string EncryptMethod { get; set; } = SSGlobal.EncryptMethods[4];
 
     /// <summary>
-    ///     密码
+    ///     Password.
     /// </summary>
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
-    ///     插件
+    ///     Plugin.
     /// </summary>
     public string? Plugin { get; set; }
 
     /// <summary>
-    ///     插件参数
+    ///     Plugin arguments.
     /// </summary>
     public string? PluginOption { get; set; }
 
@@ -39,7 +39,7 @@ public class ShadowsocksServer : Server
 public static class SSGlobal
 {
     /// <summary>
-    ///     SS 加密列表
+    ///     Supported Shadowsocks encryption methods.
     /// </summary>
     public static readonly List<string> EncryptMethods = new()
     {

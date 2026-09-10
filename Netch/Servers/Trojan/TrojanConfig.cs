@@ -4,37 +4,37 @@ namespace Netch.Servers;
 public class TrojanConfig
 {
     /// <summary>
-    ///     监听地址
+    ///     Listen address.
     /// </summary>
     public string local_addr { get; set; } = "127.0.0.1";
 
     /// <summary>
-    ///     监听端口
+    ///     Listen port.
     /// </summary>
     public int local_port { get; set; } = 2801;
 
     /// <summary>
-    ///     日志级别
+    ///     Log level.
     /// </summary>
     public int log_level { get; set; } = 1;
 
     /// <summary>
-    ///     密码
+    ///     Password.
     /// </summary>
     public List<string> password { get; set; }
 
     /// <summary>
-    ///     远端地址
+    ///     Remote address.
     /// </summary>
     public string remote_addr { get; set; }
 
     /// <summary>
-    ///     远端端口
+    ///     Remote port.
     /// </summary>
     public int remote_port { get; set; }
 
     /// <summary>
-    ///     启动类型
+    ///     Startup type.
     /// </summary>
     public string run_type { get; set; } = "client";
 

@@ -15,10 +15,10 @@ public static class Bandwidth
     private static readonly string[] Suffix = { "B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB" };
 
     /// <summary>
-    ///     计算流量
+    ///     Formats a byte count.
     /// </summary>
     /// <param name="d"></param>
-    /// <returns>带单位的流量字符串</returns>
+    /// <returns>A byte-count string with a unit.</returns>
     public static string Compute(ulong d)
     {
         const double step = 1024.00;
@@ -38,7 +38,7 @@ public static class Bandwidth
     }
 
     /// <summary>
-    ///     根据程序名统计流量
+    ///     Tracks traffic for the selected processes.
     /// </summary>
     public static void NetTraffic()
     {
@@ -87,8 +87,8 @@ public static class Bandwidth
                 tSession = new TraceEventSession("KernelAndClrEventsSession");
                 tSession.EnableKernelProvider(KernelTraceEventParser.Keywords.NetworkTCPIP);
 
-                //这玩意儿上传和下载得到的data是一样的:)
-                //所以暂时没办法区分上传下载流量
+                // The trace data is the same for upload and download, so the
+                // directions cannot currently be distinguished.
                 tSession.Source.Kernel.TcpIpRecv += data =>
                 {
                     if (pidHastSet.Contains(data.ProcessID))

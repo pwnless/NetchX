@@ -7,11 +7,11 @@ public static class MessageBoxX
 {
     /// <summary>
     /// </summary>
-    /// <param name="text">内容</param>
-    /// <param name="title">自定义标题</param>
-    /// <param name="level">弹窗等级 (标题, 图标)</param>
-    /// <param name="confirm">需要确认</param>
-    /// <param name="owner">阻止 owner Focus() 直到 Messageox 被关闭</param>
+    /// <param name="text">Message text.</param>
+    /// <param name="title">Custom title.</param>
+    /// <param name="level">Message level used for the title and icon.</param>
+    /// <param name="confirm">Whether confirmation is required.</param>
+    /// <param name="owner">The owner that cannot receive focus until the message box is closed.</param>
     public static DialogResult Show(string text,
         LogLevel level = LogLevel.INFO,
         string title = "",

@@ -9,7 +9,7 @@ namespace Netch.Utils;
 public static class Configuration
 {
     /// <summary>
-    ///     数据目录
+    ///     Configuration data directory.
     /// </summary>
     public static string DataDirectoryFullName => Path.Combine(Global.NetchDir, "data");
 
@@ -91,7 +91,7 @@ public static class Configuration
     }
 
     /// <summary>
-    ///     保存配置
+    ///     Saves the configuration.
     /// </summary>
     public static async Task SaveAsync()
     {

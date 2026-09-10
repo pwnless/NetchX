@@ -7,38 +7,38 @@ namespace Netch.Models;
 public abstract class Server : ICloneable
 {
     /// <summary>
-    ///     延迟
+    ///     Last measured latency.
     /// </summary>
     [JsonIgnore]
     public int Delay { get; private set; } = -1;
 
     /// <summary>
-    ///     组
+    ///     Server group.
     /// </summary>
     public string Group { get; set; } = Constants.DefaultGroup;
 
     /// <summary>
-    ///     地址
+    ///     Host name or address.
     /// </summary>
     public string Hostname { get; set; } = string.Empty;
 
     /// <summary>
-    ///     端口
+    ///     Server port.
     /// </summary>
     public ushort Port { get; set; }
 
     /// <summary>
-    ///     倍率
+    ///     Traffic multiplier.
     /// </summary>
     public double Rate { get; } = 1.0;
 
     /// <summary>
-    ///     备注
+    ///     Display remark.
     /// </summary>
     public string Remark { get; set; } = "";
 
     /// <summary>
-    ///     代理类型
+    ///     Proxy protocol type.
     /// </summary>
     [JsonPropertyOrder(int.MinValue)]
     public abstract string Type { get; }
@@ -49,9 +49,9 @@ public abstract class Server : ICloneable
     }
 
     /// <summary>
-    ///     获取备注
+    ///     Gets the display name.
     /// </summary>
-    /// <returns>备注</returns>
+    /// <returns>The display name.</returns>
     public override string ToString()
     {
         var remark = string.IsNullOrWhiteSpace(Remark) ? $"{Hostname}:{Port}" : Remark;
@@ -64,9 +64,9 @@ public abstract class Server : ICloneable
     public abstract string MaskedData();
 
     /// <summary>
-    ///     测试延迟
+    ///     Tests server latency.
     /// </summary>
-    /// <returns>延迟</returns>
+    /// <returns>The measured latency.</returns>
     public async Task<int> PingAsync()
     {
         try

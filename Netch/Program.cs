@@ -30,6 +30,9 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // This must precede all WinForms initialization, including creation of the main form.
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+
         // handle arguments
         if (args.Contains(Constants.Parameter.ForceUpdate))
             Flags.AlwaysShowNewVersionFound = true;
@@ -101,7 +104,6 @@ public static class Program
         Application.ThreadException += Application_OnException;
         Application.ApplicationExit += Application_OnExit;
 
-        Application.SetHighDpiMode(HighDpiMode.DpiUnawareGdiScaled);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(Global.MainForm);

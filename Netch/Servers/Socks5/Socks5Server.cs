@@ -7,19 +7,19 @@ public class Socks5Server : Server
     public override string Type { get; } = "SOCKS";
 
     /// <summary>
-    ///     密码
+    ///     Password.
     /// </summary>
     public string? Password { get; set; }
 
     /// <summary>
-    ///     账号
+    ///     User name.
     /// </summary>
     public string? Username { get; set; }
 
     public string? RemoteHostname { get; set; }
 
     /// <summary>
-    ///     版本
+    ///     Protocol version.
     /// </summary>
     public string Version { get; set; } = SOCKSGlobal.Versions[0];
 

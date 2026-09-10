@@ -1,33 +1,17 @@
 Push-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
 
+$ErrorActionPreference = 'Stop'
 .\clean.ps1
+New-Item -ItemType Directory -Path '.\release' -Force | Out-Null
 
-Set-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
-Get-ChildItem -Path '.' -Directory | ForEach-Object {
-    $name=$_.Name
-
-    if ( Test-Path ".\$name\build.ps1" ) {
-        Write-Host "Building $name"
-
-        & ".\$name\build.ps1"
-        if ( -Not $? ) {
-            Write-Host "Build $name failed"
-            exit $lastExitCode
-        }
-    }
-
+foreach ($name in @('aiodns', 'pcap2socks', 'tun2socks', 'v2ray-sn', 'wintun')) {
     Set-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
-}
-
-Set-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
-Get-ChildItem -Path '.' -Directory | ForEach-Object {
-    $name=$_.Name
-
-    if ( Test-Path ".\$name\src" ) {
-        rm -Recurse -Force ".\$name\src"
+    Write-Host "Building $name"
+    & ".\$name\build.ps1"
+    if (-not $?) {
+        Write-Host "Build $name failed"
+        exit $lastExitCode
     }
-
-    Set-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
 }
 
 Write-Host

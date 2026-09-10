@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Net.Sockets;
 using Netch.Interops;
 using Netch.Models;
@@ -27,7 +28,7 @@ public static class RouteUtils
 
     public static bool CreateRoute(NetRoute o)
     {
-        var Result = RouteHelper.CreateRoute(AddressFamily.InterNetwork, o.Network, o.Cidr, o.Gateway, (ulong)o.InterfaceIndex, o.Metric);
+        var Result = RouteHelper.CreateRoute(AddressFamily.InterNetwork, o.Network, o.Cidr, o.Gateway, checked((uint)o.InterfaceIndex), o.Metric);
 
 #if DEBUG_TUN
         Log.Verbose("CreateRoute {InterNetwork} {Address} {Cidr} {Gateway} {Interface} {Metric} Result: {Result}",
@@ -61,7 +62,7 @@ public static class RouteUtils
 
     public static bool DeleteRoute(NetRoute o)
     {
-        var Result = RouteHelper.DeleteRoute(AddressFamily.InterNetwork, o.Network, o.Cidr, o.Gateway, (ulong)o.InterfaceIndex, o.Metric);
+        var Result = RouteHelper.DeleteRoute(AddressFamily.InterNetwork, o.Network, o.Cidr, o.Gateway, checked((uint)o.InterfaceIndex), o.Metric);
 
 #if DEBUG_TUN
         Log.Verbose("DeleteRoute {InterNetwork} {Address} {Cidr} {Gateway} {Interface} {Metric} Result: {}",
@@ -81,12 +82,12 @@ public static class RouteUtils
         ip = null;
         cidr = 0;
 
-        var s = ipNetwork.Split('/');
-        if (s.Length != 2)
+        var s = ipNetwork.Split('/', StringSplitOptions.TrimEntries);
+        if (s.Length != 2 || !IPAddress.TryParse(s[0], out var address) || address.AddressFamily != AddressFamily.InterNetwork ||
+            !int.TryParse(s[1], out cidr) || cidr is < 0 or > 32)
             return false;
 
-        ip = s[0];
-        cidr = int.Parse(s[1]);
+        ip = address.ToString();
         return true;
     }
 }

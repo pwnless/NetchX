@@ -43,7 +43,7 @@ public partial class MainForm : Form
 
         #endregion
 
-        // 监听电源事件
+        // Subscribe to power events.
         SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
     }
 
@@ -68,7 +68,7 @@ public partial class MainForm : Form
 
     private void MainForm_Load(object sender, EventArgs e)
     {
-        // 计算 ComboBox绘制 目标宽度
+        // Calculate the target width used to draw ComboBox items.
         RecordSize();
 
         LoadServers();
@@ -77,24 +77,24 @@ public partial class MainForm : Form
 
         ModeService.Instance.Load();
 
-        // 加载翻译
+        // Load translations.
         TranslateControls();
 
-        // 隐藏 ConnectivityStatusLabel
+        // Hide ConnectivityStatusLabel.
         ConnectivityStatusVisible(false);
 
-        // 加载快速配置
+        // Load quick profiles.
         LoadProfiles();
 
-        // 检查更新
+        // Check for updates.
         if (Global.Settings.CheckUpdateWhenOpened)
             CheckUpdateAsync().Forget();
 
-        // 检查订阅更新
+        // Check subscription updates.
         if (Global.Settings.UpdateServersWhenOpened)
             UpdateServersFromSubscriptionAsync().Forget();
 
-        // 打开软件时启动加速，产生开始按钮点击事件
+        // Start acceleration on launch by raising the Start button click event.
         if (Global.Settings.StartWhenOpened)
             ControlButton.PerformClick();
 
@@ -108,7 +108,7 @@ public partial class MainForm : Form
         _numberBoxWrap = _numberBoxWidth / 30;
 
         _configurationGroupBoxHeight = ConfigurationGroupBox.Height;
-        _profileConfigurationHeight = ConfigurationGroupBox.Controls[0].Height / 3; // 因为 AutoSize, 所以得到的是Controls的总高度
+        _profileConfigurationHeight = ConfigurationGroupBox.Controls[0].Height / 3; // AutoSize reports the combined height of the controls.
         _profileGroupBoxPaddingHeight = ProfileGroupBox.Height - ProfileTable.Height;
         _profileTableHeight = ProfileTable.Height;
     }
@@ -362,9 +362,10 @@ public partial class MainForm : Form
 
             NotifyTip(i18N.Translate("DNS cache cleanup succeeded"));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // ignored
+            Log.Warning(ex, "DNS cache cleanup failed");
+            MessageBoxX.Show(i18N.TranslateFormat("DNS cache cleanup failed: {0}", ex.Message));
         }
         finally
         {
@@ -405,7 +406,7 @@ public partial class MainForm : Form
     #endregion
 
     /// <summary>
-    ///     菜单栏强制退出
+    ///     Force exit from the menu.
     /// </summary>
     private void ForceExitToolStripMenuItem_Click(object sender, EventArgs e)
     {
@@ -439,9 +440,9 @@ public partial class MainForm : Form
             progress.ProgressChanged += (_, percentage) => { NewVersionLabel.Text = $"{percentage}%"; };
 
             string downloadDirectory = Path.Combine(Global.NetchDir, "data");
+            Directory.CreateDirectory(downloadDirectory);
 
-            var (updateFileName, sha256) = UpdateChecker.GetLatestUpdateFileNameAndHash();
-            var updateFileUrl = UpdateChecker.LatestRelease.assets[0].browser_download_url!;
+            var (updateFileName, sha256, updateFileUrl) = UpdateChecker.GetLatestUpdateFileNameAndHash();
 
             var updateFileFullName = Path.Combine(downloadDirectory, updateFileName);
             var updater = new Updater(updateFileFullName, Global.NetchDir);
@@ -526,7 +527,7 @@ public partial class MainForm : Form
 
         Configuration.SaveAsync().Forget();
 
-        // 服务器、模式 需选择
+        // A server and mode must be selected.
         if (ServerComboBox.SelectedItem is not Server server)
         {
             MessageBoxX.Show(i18N.Translate("Please select a server first"));
@@ -562,7 +563,7 @@ public partial class MainForm : Form
         if (Global.Settings.MinimizeWhenStarted)
             Minimize();
 
-        // 自动检测延迟
+        // Automatically test latency.
         async Task StartedPingAsync()
         {
             while (State == State.Started)
@@ -625,14 +626,14 @@ public partial class MainForm : Form
 
     private void SelectLastServer()
     {
-        // 如果值合法，选中该位置
+        // Select the saved index when it is valid.
         if (Global.Settings.ServerComboBoxSelectedIndex > 0 && Global.Settings.ServerComboBoxSelectedIndex < ServerComboBox.Items.Count)
             ServerComboBox.SelectedIndex = Global.Settings.ServerComboBoxSelectedIndex;
-        // 如果值非法，且当前 ServerComboBox 中有元素，选择第一个位置
+        // Otherwise, select the first item when ServerComboBox contains items.
         else if (ServerComboBox.Items.Count > 0)
             ServerComboBox.SelectedIndex = 0;
 
-        // 如果当前 ServerComboBox 中没元素，不做处理
+        // Do nothing when ServerComboBox is empty.
     }
 
     private void ServerComboBox_SelectionChangeCommitted(object sender, EventArgs o)
@@ -642,7 +643,7 @@ public partial class MainForm : Form
 
     private async void EditServerPictureBox_Click(object sender, EventArgs e)
     {
-        // 当前ServerComboBox中至少有一项
+        // ServerComboBox must have a selected item.
         if (!(ServerComboBox.SelectedItem is Server server))
         {
             MessageBoxX.Show(i18N.Translate("Please select a server first"));
@@ -682,7 +683,7 @@ public partial class MainForm : Form
 
     private void CopyLinkPictureBox_Click(object sender, EventArgs e)
     {
-        // 当前ServerComboBox中至少有一项
+        // ServerComboBox must have a selected item.
         if (!(ServerComboBox.SelectedItem is Server server))
         {
             MessageBoxX.Show(i18N.Translate("Please select a server first"));
@@ -691,7 +692,7 @@ public partial class MainForm : Form
 
         try
         {
-            //听说巨硬BUG经常会炸，所以Catch一下 :D
+            // Clipboard access can fail unexpectedly, so handle the exception.
             string text;
             if (ModifierKeys == Keys.Control)
                 text = ShareLink.GetNetchLink(server);
@@ -700,15 +701,16 @@ public partial class MainForm : Form
 
             Clipboard.SetText(text);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // ignored
+            Log.Warning(ex, "Copy share link failed");
+            MessageBoxX.Show(i18N.TranslateFormat("Copy share link failed: {0}", ex.Message));
         }
     }
 
     private void DeleteServerPictureBox_Click(object sender, EventArgs e)
     {
-        // 当前 ServerComboBox 中至少有一项
+        // ServerComboBox must have a selected item.
         if (!(ServerComboBox.SelectedItem is Server server))
         {
             MessageBoxX.Show(i18N.Translate("Please select a server first"));
@@ -739,14 +741,14 @@ public partial class MainForm : Form
 
     private void SelectLastMode()
     {
-        // 如果值合法，选中该位置
+        // Select the saved index when it is valid.
         if (Global.Settings.ModeComboBoxSelectedIndex > 0 && Global.Settings.ModeComboBoxSelectedIndex < ModeComboBox.Items.Count)
             ModeComboBox.SelectedIndex = Global.Settings.ModeComboBoxSelectedIndex;
-        // 如果值非法，且当前 ModeComboBox 中有元素，选择第一个位置
+        // Otherwise, select the first item when ModeComboBox contains items.
         else if (ModeComboBox.Items.Count > 0)
             ModeComboBox.SelectedIndex = 0;
 
-        // 如果当前 ModeComboBox 中没元素，不做处理
+        // Do nothing when ModeComboBox is empty.
     }
 
     private void ModeComboBox_SelectionChangeCommitted(object sender, EventArgs o)
@@ -763,7 +765,7 @@ public partial class MainForm : Form
 
     private void EditModePictureBox_Click(object sender, EventArgs e)
     {
-        // 当前ModeComboBox中至少有一项
+        // ModeComboBox must have a selected item.
         if (ModeComboBox.SelectedIndex == -1)
         {
             MessageBoxX.Show(i18N.Translate("Please select a mode first"));
@@ -799,7 +801,7 @@ public partial class MainForm : Form
 
     private void DeleteModePictureBox_Click(object sender, EventArgs e)
     {
-        // 当前ModeComboBox中至少有一项
+        // ModeComboBox must have a selected item.
         if (ModeComboBox.Items.Count <= 0 || ModeComboBox.SelectedIndex == -1)
         {
             MessageBoxX.Show(i18N.Translate("Please select a mode first"));
@@ -967,7 +969,7 @@ public partial class MainForm : Form
     private State _state = State.Waiting;
 
     /// <summary>
-    ///     当前状态
+    ///     Current state.
     /// </summary>
     public State State
     {
@@ -979,7 +981,7 @@ public partial class MainForm : Form
                 ServerComboBox.Enabled = ModeComboBox.Enabled = EditModePictureBox.Enabled =
                     EditServerPictureBox.Enabled = DeleteModePictureBox.Enabled = DeleteServerPictureBox.Enabled = enabled;
 
-                // 启动需要禁用的控件
+                // Controls that must be disabled while starting.
                 ServerToolStripMenuItem.Enabled = ModeToolStripMenuItem.Enabled =
                     SubscriptionToolStripMenuItem.Enabled = UninstallServiceToolStripMenuItem.Enabled = enabled;
             }
@@ -1058,7 +1060,7 @@ public partial class MainForm : Form
     }
 
     /// <summary>
-    ///     更新状态栏文本
+    ///     Update the status-bar text.
     /// </summary>
     /// <param name="text"></param>
     public void StatusText(string? text = null)
@@ -1118,7 +1120,7 @@ public partial class MainForm : Form
     }
 
     /// <summary>
-    ///     更新 NAT指示灯颜色
+    ///     Update the NAT status indicator color.
     /// </summary>
     /// <param name="natType">NAT Type. keep default(-1) to Hide Light</param>
     private void UpdateNatTypeLight(int natType = -1)
@@ -1235,7 +1237,7 @@ public partial class MainForm : Form
     {
         switch (e.Mode)
         {
-            case PowerModes.Suspend: //操作系统即将挂起
+            case PowerModes.Suspend: // The operating system is about to suspend.
                 if (!IsWaiting())
                 {
                     _resumeFlag = true;
@@ -1244,7 +1246,7 @@ public partial class MainForm : Form
                 }
 
                 break;
-            case PowerModes.Resume: //操作系统即将从挂起状态继续
+            case PowerModes.Resume: // The operating system is resuming from suspension.
                 if (_resumeFlag)
                 {
                     _resumeFlag = false;
@@ -1260,12 +1262,12 @@ public partial class MainForm : Form
 
     private void Minimize()
     {
-        // 使关闭时窗口向右下角缩小的效果
+        // Make the window minimize toward the notification area when closed.
         WindowState = FormWindowState.Minimized;
 
         if (_isFirstCloseWindow)
         {
-            // 显示提示语
+            // Show a notification.
             NotifyTip(i18N.Translate("Netch is now minimized to the notification bar, double click this icon to restore."));
             _isFirstCloseWindow = false;
         }
@@ -1308,13 +1310,13 @@ public partial class MainForm : Form
     {
         if (e.CloseReason == CloseReason.UserClosing && State != State.Terminating)
         {
-            // 取消"关闭窗口"事件
-            e.Cancel = true; // 取消关闭窗体 
+            // Cancel the window-close event.
+            e.Cancel = true; // Keep the form open.
 
-            // 如果未勾选关闭窗口时退出，隐藏至右下角托盘图标
+            // Hide in the notification area unless exit-on-close is enabled.
             if (!Global.Settings.ExitWhenClosed)
                 Minimize();
-            // 如果勾选了关闭时退出，自动点击退出按钮
+            // Otherwise, invoke the exit action.
             else
                 Exit();
         }
@@ -1352,12 +1354,12 @@ public partial class MainForm : Form
     #region NetTraffic
 
     /// <summary>
-    ///     上一次下载的流量
+    ///     Previously recorded download traffic.
     /// </summary>
     public ulong LastDownloadBandwidth;
 
     /// <summary>
-    ///     上一次上传的流量
+    ///     Previously recorded upload traffic.
     /// </summary>
     public ulong LastUploadBandwidth;
 
@@ -1395,7 +1397,7 @@ public partial class MainForm : Form
     }
 
     /// <summary>
-    ///     通知图标右键菜单退出
+    ///     Exit from the notification icon context menu.
     /// </summary>
     private void ExitToolStripButton_Click(object sender, EventArgs e)
     {
@@ -1409,7 +1411,7 @@ public partial class MainForm : Form
 
     public void NotifyTip(string text, int timeout = 0, bool info = true)
     {
-        // 会阻塞线程 timeout 秒(?)
+        // This may block the thread for the specified timeout.
         NotifyIcon.ShowBalloonTip(timeout, UpdateChecker.Name, text, info ? ToolTipIcon.Info : ToolTipIcon.Error);
     }
 
@@ -1427,26 +1429,26 @@ public partial class MainForm : Form
         if (sender is not ComboBox cbx)
             return;
 
-        // 绘制背景颜色
+        // Draw the background color.
         e.Graphics.FillRectangle(Brushes.White, e.Bounds);
 
         if (e.Index < 0)
             return;
 
-        // 绘制 备注/名称 字符串
+        // Draw the remark or name string.
         TextRenderer.DrawText(e.Graphics, cbx.Items[e.Index].ToString(), cbx.Font, e.Bounds, Color.Black, TextFormatFlags.Left);
 
         switch (cbx.Items[e.Index])
         {
             case Server item:
             {
-                // 计算延迟底色
+                // Determine the latency background color.
                 var numBoxBackBrush = item.Delay switch { > 200 => Brushes.Red, > 80 => Brushes.Yellow, >= 0 => _greenBrush, _ => Brushes.Gray };
 
-                // 绘制延迟底色
+                // Draw the latency background color.
                 e.Graphics.FillRectangle(numBoxBackBrush, _numberBoxX, e.Bounds.Y, _numberBoxWidth, e.Bounds.Height);
 
-                // 绘制延迟字符串
+                // Draw the latency string.
                 TextRenderer.DrawText(e.Graphics,
                     item.Delay.ToString(),
                     cbx.Font,
@@ -1459,10 +1461,10 @@ public partial class MainForm : Form
             case Mode item:
             {
                 /*
-                // 绘制 模式Box 底色
+                // Draw the mode box background color.
                 e.Graphics.FillRectangle(Brushes.Gray, _numberBoxX, e.Bounds.Y, _numberBoxWidth, e.Bounds.Height);
 
-                // 绘制 模式行数 字符串
+                // Draw the mode row-count string.
                 TextRenderer.DrawText(e.Graphics,
                     item.Content.Count.ToString(),
                     cbx.Font,

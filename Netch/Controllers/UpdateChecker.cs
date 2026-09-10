@@ -15,7 +15,7 @@ public static class UpdateChecker
     public const string Name = @"Netch";
     public const string Copyright = @"Copyright © 2019 - 2022";
 
-    public const string AssemblyVersion = @"1.9.7";
+    public const string AssemblyVersion = @"2.0.0";
     private const string Suffix = @"";
 
     public static readonly string Version = $"{AssemblyVersion}{(string.IsNullOrEmpty(Suffix) ? "" : $"-{Suffix}")}";
@@ -66,19 +66,32 @@ public static class UpdateChecker
         }
     }
 
-    public static (string fileName, string sha256) GetLatestUpdateFileNameAndHash(string? keyword = null)
+    public static (string fileName, string sha256, string downloadUrl) GetLatestUpdateFileNameAndHash(string? keyword = null)
     {
         var matches = Regex.Matches(LatestRelease.body, @"^\| (?<filename>.*) \| (?<sha256>.*) \|\r?$", RegexOptions.Multiline).Skip(2);
         /*
           Skip(2)
           
-          | 文件名 | SHA256 |
+          | File name | SHA256 |
           | :- | :- |
        */
 
-        Match match = keyword == null ? matches.First() : matches.First(m => m.Groups["filename"].Value.Contains(keyword));
+        Match match = keyword == null ? matches.First() : matches.First(m => m.Groups["filename"].Value.Contains(keyword, StringComparison.Ordinal));
+        var fileName = match.Groups["filename"].Value.Trim();
+        var sha256 = match.Groups["sha256"].Value.Trim();
 
-        return (match.Groups["filename"].Value, match.Groups["sha256"].Value);
+        if (string.IsNullOrWhiteSpace(fileName) || Path.IsPathRooted(fileName) ||
+            fileName is "." or ".." || !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal) ||
+            !Regex.IsMatch(sha256, "^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant))
+            throw new InvalidDataException("The update manifest contains an invalid file name or SHA-256 hash.");
+
+        var asset = LatestRelease.assets.SingleOrDefault(candidate =>
+            string.Equals(candidate.name, fileName, StringComparison.Ordinal));
+        if (asset?.browser_download_url == null || !Uri.TryCreate(asset.browser_download_url, UriKind.Absolute, out var downloadUri) ||
+            downloadUri.Scheme != Uri.UriSchemeHttps)
+            throw new InvalidDataException("The update manifest does not have a matching HTTPS release asset.");
+
+        return (fileName, sha256.ToLowerInvariant(), downloadUri.AbsoluteUri);
     }
 
     public static string GetLatestReleaseContent()
@@ -86,7 +99,7 @@ public static class UpdateChecker
         var sb = new StringBuilder();
         foreach (string l in LatestRelease.body.GetLines(false).SkipWhile(l => l.FirstOrDefault() != '#'))
         {
-            if (l.Contains("校验和"))
+            if (l.Contains("校验和") || l.Equals("## Checksums", StringComparison.OrdinalIgnoreCase))
                 break;
 
             sb.AppendLine(l);

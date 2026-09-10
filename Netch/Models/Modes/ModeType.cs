@@ -3,17 +3,17 @@
 public enum ModeType
 {
     /// <summary>
-    ///     进程代理
+    ///     Process-based proxying.
     /// </summary>
     ProcessMode,
 
     /// <summary>
-    ///     网络共享
+    ///     Network sharing.
     /// </summary>
     ShareMode,
 
     /// <summary>
-    ///     网卡代理
+    ///     Virtual network adapter proxying.
     /// </summary>
     TunMode
 }

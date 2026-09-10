@@ -11,19 +11,19 @@ namespace Netch;
 public static class Global
 {
     /// <summary>
-    ///     主窗体的静态实例
+    ///     Lazily created main form instance.
     /// </summary>
     private static readonly Lazy<MainForm> LazyMainForm = new(() => new MainForm());
 
     /// <summary>
-    ///     用于读取和写入的配置
+    ///     Application settings used for reads and writes.
     /// </summary>
     public static Setting Settings = new();
 
     public static readonly JobObject Job = new();
 
     /// <summary>
-    ///     用于存储模式
+    ///     Available traffic modes.
     /// </summary>
     public static readonly List<Mode> Modes = new();
 
@@ -37,7 +37,7 @@ public static class Global
     }
 
     /// <summary>
-    ///     主窗体的静态实例
+    ///     Gets the lazily created main form instance.
     /// </summary>
     public static MainForm MainForm => LazyMainForm.Value;
 

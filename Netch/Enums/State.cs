@@ -1,37 +1,37 @@
 ﻿namespace Netch.Enums;
 
 /// <summary>
-///     状态
+///     Application state.
 /// </summary>
 public enum State
 {
     /// <summary>
-    ///     等待命令中
+    ///     Waiting for a command.
     /// </summary>
     Waiting,
 
     /// <summary>
-    ///     正在启动中
+    ///     Starting.
     /// </summary>
     Starting,
 
     /// <summary>
-    ///     已启动
+    ///     Started.
     /// </summary>
     Started,
 
     /// <summary>
-    ///     正在停止中
+    ///     Stopping.
     /// </summary>
     Stopping,
 
     /// <summary>
-    ///     已停止
+    ///     Stopped.
     /// </summary>
     Stopped,
 
     /// <summary>
-    ///     退出中
+    ///     Terminating.
     /// </summary>
     Terminating
 }

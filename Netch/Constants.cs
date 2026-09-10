@@ -23,6 +23,7 @@ public static class Constants
     }
 
     public const string WintunDllFile = "bin\\wintun.dll";
+    public const string Tun2SocksFile = "bin\\tun2socks.exe";
     public const string DisableModeDirectoryFileName = "disabled";
 
     public const string DefaultPrimaryDNS = "1.1.1.1";

@@ -3,17 +3,17 @@
 public class Subscription
 {
     /// <summary>
-    ///     启用状态
+    ///     Whether this subscription is enabled.
     /// </summary>
     public bool Enable { get; set; } = true;
 
     /// <summary>
-    ///     链接
+    ///     Subscription URL.
     /// </summary>
     public string Link { get; set; } = string.Empty;
 
     /// <summary>
-    ///     备注
+    ///     Display remark.
     /// </summary>
     public string Remark { get; set; } = string.Empty;
 

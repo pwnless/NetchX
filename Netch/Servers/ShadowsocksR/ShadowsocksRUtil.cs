@@ -49,7 +49,7 @@ public class ShadowsocksRUtil : IServerUtil
     }
 
     /// <summary>
-    ///     SSR链接解析器
+    ///     ShadowsocksR link parser.
     ///     Copy From
     ///     https://github.com/HMBSbige/ShadowsocksR-Windows/blob/d9dc8d032a6e04c14b9dc6c8f673c9cc5aa9f607/shadowsocks-csharp/Model/Server.cs#L428
     ///     Thx :D

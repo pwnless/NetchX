@@ -11,32 +11,32 @@ public class ShadowsocksRServer : Server
     }
 
     /// <summary>
-    ///     密码
+    ///     Password.
     /// </summary>
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
-    ///     加密方式
+    ///     Encryption method.
     /// </summary>
     public string EncryptMethod { get; set; } = SSRGlobal.EncryptMethods[4];
 
     /// <summary>
-    ///     协议
+    ///     Protocol.
     /// </summary>
     public string Protocol { get; set; } = SSRGlobal.Protocols[0];
 
     /// <summary>
-    ///     协议参数
+    ///     Protocol arguments.
     /// </summary>
     public string? ProtocolParam { get; set; }
 
     /// <summary>
-    ///     混淆
+    ///     Obfuscation method.
     /// </summary>
     public string OBFS { get; set; } = SSRGlobal.OBFSs[0];
 
     /// <summary>
-    ///     混淆参数
+    ///     Obfuscation arguments.
     /// </summary>
     public string? OBFSParam { get; set; }
 }
@@ -44,7 +44,7 @@ public class ShadowsocksRServer : Server
 public class SSRGlobal
 {
     /// <summary>
-    ///     SSR 协议列表
+    ///     Supported ShadowsocksR protocols.
     /// </summary>
     public static readonly List<string> Protocols = new()
     {
@@ -57,7 +57,7 @@ public class SSRGlobal
     };
 
     /// <summary>
-    ///     SSR 混淆列表
+    ///     Supported ShadowsocksR obfuscation methods.
     /// </summary>
     public static readonly List<string> OBFSs = new()
     {
@@ -71,7 +71,7 @@ public class SSRGlobal
     };
 
     /// <summary>
-    ///     SS/SSR 加密方式
+    ///     Supported Shadowsocks and ShadowsocksR encryption methods.
     /// </summary>
     public static readonly List<string> EncryptMethods = SSGlobal.EncryptMethods;
 }

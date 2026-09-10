@@ -23,8 +23,9 @@ extern wstring tgtPort;
 extern string tgtUsername;
 extern string tgtPassword;
 
-extern vector<wstring> bypassList;
-extern vector<wstring> handleList;
+extern vector<wregex> bypassList;
+extern vector<wregex> handleList;
+extern shared_mutex ruleLock;
 
 extern atomic_ullong UP;
 extern atomic_ullong DL;
@@ -113,8 +114,24 @@ extern "C" {
 			filterDNS = (wstring(value).find(L"false") == string::npos);
 			break;
 		case AIO_ICMPING:
-			icmping = atoi(ws2s(value).c_str());
+		{
+			// ICMP replies are queued, so retain a finite upper bound for both
+			// latency and queue retention.  Reject malformed/negative values
+			// instead of letting atoi wrap them into DWORD.
+			constexpr unsigned long MaxIcmpDelayMilliseconds = 60000;
+			if (value == NULL || *value == L'\0')
+				return FALSE;
+			for (const wchar_t* digit = value; *digit != L'\0'; ++digit)
+				if (*digit < L'0' || *digit > L'9')
+					return FALSE;
+			wchar_t* end = NULL;
+			errno = 0;
+			const unsigned long parsed = wcstoul(value, &end, 10);
+			if (value == end || *end != L'\0' || errno == ERANGE || parsed > MaxIcmpDelayMilliseconds)
+				return FALSE;
+			icmping = static_cast<DWORD>(parsed);
 			break;
+		}
 		case AIO_DNSONLY:
 			dnsOnly = (wstring(value).find(L"false") == string::npos);
 			break;
@@ -140,30 +157,33 @@ extern "C" {
 			tgtPassword = ws2s(value);
 			break;
 		case AIO_CLRNAME:
+		{
+			unique_lock<shared_mutex> lock(ruleLock);
 			bypassList.clear();
 			handleList.clear();
 			break;
+		}
 		case AIO_BYPNAME:
 			try
 			{
 				std::wregex checker(value);
+				unique_lock<shared_mutex> lock(ruleLock);
+				bypassList.emplace_back(move(checker));
 			}
 			catch (regex_error) {
 				return FALSE;
 			}
-
-			bypassList.emplace_back(value);
 			break;
 		case AIO_ADDNAME:
 			try
 			{
 				std::wregex checker(value);
+				unique_lock<shared_mutex> lock(ruleLock);
+				handleList.emplace_back(move(checker));
 			}
 			catch (regex_error) {
 				return FALSE;
 			}
-
-			handleList.emplace_back(value);
 			break;
 		default:
 			return FALSE;
@@ -185,12 +205,15 @@ extern "C" {
 		if (!eh_init())
 		{
 			puts("[Redirector][aio_init] !eh_init");
+			WSACleanup();
 			return FALSE;
 		}
 
 		if (nf_init("netfilter2", &EventHandler) != NF_STATUS_SUCCESS)
 		{
 			puts("[Redirector][aio_init] nf_init != NF_STATUS_SUCCESS");
+			eh_free();
+			WSACleanup();
 			return FALSE;
 		}
 
@@ -241,7 +264,7 @@ extern "C" {
 			/* 172.16.0.0/12 */
 			memset(&rule, 0, sizeof(NF_RULE));
 			rule.ip_family = AF_INET;
-			inet_pton(AF_INET, "100.64.0.0", rule.remoteIpAddress);
+			inet_pton(AF_INET, "172.16.0.0", rule.remoteIpAddress);
 			inet_pton(AF_INET, "255.240.0.0", rule.remoteIpAddressMask);
 			rule.filteringFlag = NF_ALLOW;
 			nf_addRule(&rule, FALSE);
@@ -273,6 +296,14 @@ extern "C" {
 
 		if (filterICMP)
 		{
+			if (!IPHandler::INIT())
+			{
+				puts("[Redirector][aio_init] !IPHandler::INIT");
+				nf_free();
+				eh_free();
+				WSACleanup();
+				return FALSE;
+			}
 			nf_setIPEventHandler(&IPEventHandler);
 
 			memset(&rule, 0, sizeof(NF_RULE));
@@ -321,8 +352,9 @@ extern "C" {
 	__declspec(dllexport) void __cdecl aio_free()
 	{
 		nf_deleteRules();
-		nf_free();
+		IPHandler::FREE();
 		eh_free();
+		nf_free();
 
 		WSACleanup();
 		return;

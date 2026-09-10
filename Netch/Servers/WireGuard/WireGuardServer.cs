@@ -12,22 +12,22 @@ public class WireGuardServer : Server
     }
 
     /// <summary>
-    ///     本地地址
+    ///     Local addresses.
     /// </summary>
     public string LocalAddresses { get; set; } = "172.16.0.2";
 
     /// <summary>
-    ///     节点公钥
+    ///     Peer public key.
     /// </summary>
     public string PeerPublicKey { get; set; } = string.Empty;
 
     /// <summary>
-    ///     私钥
+    ///     Private key.
     /// </summary>
     public string PrivateKey { get; set; }
 
     /// <summary>
-    ///     节点预共享密钥
+    ///     Peer pre-shared key.
     /// </summary>
     public string? PreSharedKey { get; set; }
 

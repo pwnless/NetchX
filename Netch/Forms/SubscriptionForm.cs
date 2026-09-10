@@ -39,7 +39,7 @@ public partial class SubscriptionForm : Form
     }
 
     /// <summary>
-    ///     选中/取消选中
+    ///     Selects or clears the current selection.
     /// </summary>
     private void SubscriptionLinkListView_SelectedIndexChanged(object sender, EventArgs e)
     {
@@ -47,7 +47,7 @@ public partial class SubscriptionForm : Form
     }
 
     /// <summary>
-    ///     订阅启/禁用
+    ///     Enables or disables a subscription.
     /// </summary>
     private void SubscriptionLinkListView_ItemChecked(object sender, ItemCheckedEventArgs e)
     {

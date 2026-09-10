@@ -22,6 +22,16 @@ void UnicastIPChangeCallback(PVOID ctx, PMIB_UNICASTIPADDRESS_ROW row, MIB_NOTIF
 
 bool make(PMIB_IPFORWARD_ROW2 rule, USHORT inet, const char* address, UINT8 cidr, const char* gateway, ULONG index, ULONG metric)
 {
+	if (rule == NULL || address == NULL || gateway == NULL || index == 0)
+	{
+		return false;
+	}
+
+	if ((inet == AF_INET && cidr > 32) || (inet == AF_INET6 && cidr > 128) || (inet != AF_INET && inet != AF_INET6))
+	{
+		return false;
+	}
+
     rule->InterfaceIndex = index;
     rule->DestinationPrefix.PrefixLength = cidr;
 
@@ -96,6 +106,11 @@ extern "C" {
 
     __declspec(dllexport) BOOL __cdecl CreateIPv4(const char* address, const char* netmask, ULONG index)
     {
+		if (address == NULL || netmask == NULL || index == 0)
+		{
+			return FALSE;
+		}
+
         ULONG addr = 0;
         if (inet_pton(AF_INET, address, &addr) != 1)
         {
@@ -115,6 +130,11 @@ extern "C" {
 
     __declspec(dllexport) BOOL __cdecl CreateUnicastIP(USHORT inet, const char* address, UINT8 cidr, ULONG index)
     {
+		if (address == NULL || index == 0 || (inet == AF_INET && cidr > 32) || (inet == AF_INET6 && cidr > 128))
+		{
+			return FALSE;
+		}
+
         MIB_UNICASTIPADDRESS_ROW addr;
         InitializeUnicastIpAddressEntry(&addr);
 

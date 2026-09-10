@@ -107,7 +107,9 @@ public static class ShareLink
         if (string.IsNullOrEmpty(NetchLink.GetProperty("Hostname").GetString()))
             throw new FormatException();
 
-        if (!ushort.TryParse(NetchLink.GetProperty("Port").GetString(), out _))
+        var port = NetchLink.GetProperty("Port");
+        if (!(port.ValueKind == JsonValueKind.Number && port.TryGetUInt16(out _)) &&
+            !(port.ValueKind == JsonValueKind.String && ushort.TryParse(port.GetString(), out _)))
             throw new FormatException();
 
         return JsonSerializer.Deserialize<Server>(text,
@@ -121,16 +123,17 @@ public static class ShareLink
     {
         var jsonSerializerOptions = Global.NewCustomJsonSerializerOptions();
         jsonSerializerOptions.WriteIndented = false;
-        return "Netch://" + URLSafeBase64Encode(JsonSerializer.Serialize(s, jsonSerializerOptions));
+        jsonSerializerOptions.Converters.Add(new ServerConverterWithTypeDiscriminator());
+        return "Netch://" + URLSafeBase64Encode(JsonSerializer.Serialize<Server>(s, jsonSerializerOptions));
     }
 
     #region Utils
 
     /// <summary>
-    ///     URL 传输安全的 Base64 解码
+    ///     Decodes URL-safe Base64 text.
     /// </summary>
-    /// <param name="text">需要解码的字符串</param>
-    /// <returns>解码后的字符串</returns>
+    /// <param name="text">Text to decode.</param>
+    /// <returns>The decoded text.</returns>
     public static string URLSafeBase64Decode(string text)
     {
         return Encoding.UTF8.GetString(
@@ -138,10 +141,10 @@ public static class ShareLink
     }
 
     /// <summary>
-    ///     URL 传输安全的 Base64 加密
+    ///     Encodes text as URL-safe Base64.
     /// </summary>
-    /// <param name="text">需要加密的字符串</param>
-    /// <returns>加密后的字符串</returns>
+    /// <param name="text">Text to encode.</param>
+    /// <returns>The encoded text.</returns>
     public static string URLSafeBase64Encode(string text)
     {
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(text)).Replace("+", "-").Replace("/", "_").Replace("=", "");

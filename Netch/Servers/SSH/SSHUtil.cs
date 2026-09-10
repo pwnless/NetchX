@@ -33,7 +33,7 @@ public class SSHUtil : IServerUtil
 
     public string GetShareLink(Server s)
     {
-        return V2rayUtils.GetVShareLink(s, "ssh");
+        throw new NotSupportedException("SSH standard share links are not implemented. Use the Ctrl-copy Netch link instead.");
     }
 
     public IServerController GetController()
@@ -43,7 +43,7 @@ public class SSHUtil : IServerUtil
 
     public IEnumerable<Server> ParseUri(string text)
     {
-        return V2rayUtils.ParseVUri(text);
+        throw new NotSupportedException("SSH standard share links are not implemented.");
     }
 
     public bool CheckServer(Server s)

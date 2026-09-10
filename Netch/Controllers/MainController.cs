@@ -25,24 +25,24 @@ public static class MainController
 
     public static async Task StartAsync(Server server, Mode mode)
     {
-        using var releaser = await Lock.EnterAsync();
+        using var _ = await Lock.EnterAsync();
 
         Log.Information("Start MainController: {Server} {Mode}", $"{server.Type}", $"[{(int)mode.Type}]{mode.i18NRemark}");
 
-        if (await DnsUtils.LookupAsync(server.Hostname) == null)
-            throw new MessageException(i18N.Translate("Lookup Server hostname failed"));
-
-        // TODO Disable NAT Type Test setting
-        // cache STUN Server ip to prevent "Wrong STUN Server"
-        DnsUtils.LookupAsync(Global.Settings.STUN_Server).Forget();
-
-        Server = server;
-        Mode = mode;
-
-        await Task.WhenAll(Task.Run(NativeMethods.RefreshDNSCache), Task.Run(Firewall.AddNetchFwRules));
-
         try
         {
+            if (await DnsUtils.LookupAsync(server.Hostname) == null)
+                throw new MessageException(i18N.Translate("Lookup Server hostname failed"));
+
+            // TODO Disable NAT Type Test setting
+            // cache STUN Server ip to prevent "Wrong STUN Server"
+            DnsUtils.LookupAsync(Global.Settings.STUN_Server).Forget();
+
+            Server = server;
+            Mode = mode;
+
+            await Task.WhenAll(Task.Run(NativeMethods.RefreshDNSCache), Task.Run(Firewall.AddNetchFwRules));
+
             ModeController = ModeService.GetModeControllerByType(mode.Type, out var modePort, out var portName);
 
             if (modePort != null)
@@ -74,8 +74,10 @@ public static class MainController
         }
         catch (Exception e)
         {
-            releaser.Dispose();
-            await StopAsync();
+            // This method already owns Lock.  Releasing it before calling the
+            // public StopAsync creates a window in which a second StartAsync
+            // can install new controllers that this failed startup then stops.
+            await StopCoreAsync();
 
             switch (e)
             {
@@ -94,20 +96,19 @@ public static class MainController
 
     public static async Task StopAsync()
     {
-        if (Lock.CurrentCount == 0)
-        {
-            (await Lock.EnterAsync()).Dispose();
-            if (ServerController == null && ModeController == null)
-                // stopped
-                return;
-
-            // else begin stop
-        }
-
         using var _ = await Lock.EnterAsync();
+        await StopCoreAsync();
+    }
 
+    private static async Task StopCoreAsync()
+    {
         if (ServerController == null && ModeController == null)
+        {
+            Socks5Server = null;
+            Server = null;
+            Mode = null;
             return;
+        }
 
         Log.Information("Stop Main Controller");
         StatusPortInfoText.Reset();
@@ -127,8 +128,14 @@ public static class MainController
             Log.Error(e, "MainController Stop Error");
         }
 
-        ServerController = null;
-        ModeController = null;
+        finally
+        {
+            ServerController = null;
+            ModeController = null;
+            Socks5Server = null;
+            Server = null;
+            Mode = null;
+        }
     }
 
     public static void PortCheck(ushort port, string portName, PortType portType = PortType.Both)
@@ -155,7 +162,7 @@ public static class MainController
             if (fileName == null)
                 continue;
 
-            if (fileName.StartsWith(Global.NetchDir))
+            if (IsPathUnderDirectory(fileName, Global.NetchDir))
             {
                 p.Kill();
                 p.WaitForExit();
@@ -167,6 +174,14 @@ public static class MainController
         }
 
         PortCheck(port, portName, PortType.TCP);
+    }
+
+    private static bool IsPathUnderDirectory(string path, string directory)
+    {
+        var relativePath = Path.GetRelativePath(Path.GetFullPath(directory), Path.GetFullPath(path));
+        return !Path.IsPathRooted(relativePath) &&
+               relativePath != ".." &&
+               !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
     }
 
     public static Task<NatTypeTestResult> DiscoveryNatTypeAsync(CancellationToken ctx = default)

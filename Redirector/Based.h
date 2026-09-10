@@ -8,7 +8,11 @@
 #include <queue>
 #include <regex>
 #include <mutex>
+#include <shared_mutex>
 #include <chrono>
+#include <atomic>
+#include <condition_variable>
+#include <memory>
 #include <string>
 #include <vector>
 #include <thread>

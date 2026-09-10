@@ -12,22 +12,22 @@ public class SSHServer : Server
     }
 
     /// <summary>
-    ///     用户
+    ///     User name.
     /// </summary>
     public string User { get; set; } = "root";
 
     /// <summary>
-    ///     密码
+    ///     Password.
     /// </summary>
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
-    ///     私钥
+    ///     Private key.
     /// </summary>
     public string PrivateKey { get; set; }
 
     /// <summary>
-    ///     主机公钥
+    ///     Host public key.
     /// </summary>
     public string? PublicKey { get; set; }
 }

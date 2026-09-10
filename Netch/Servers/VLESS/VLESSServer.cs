@@ -5,17 +5,17 @@ public class VLESSServer : VMessServer
     public override string Type { get; } = "VLESS";
 
     /// <summary>
-    ///     加密方式
+    ///     Encryption method.
     /// </summary>
     public override string EncryptMethod { get; set; } = "none";
 
     /// <summary>
-    ///     传输协议
+    ///     Transport protocol.
     /// </summary>
     public override string TransferProtocol { get; set; } = VLESSGlobal.TransferProtocols[0];
 
     /// <summary>
-    ///     伪装类型
+    ///     Camouflage type.
     /// </summary>
     public override string FakeType { get; set; } = VLESSGlobal.FakeTypes[0];
 }

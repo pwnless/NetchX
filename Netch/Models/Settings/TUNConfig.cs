@@ -1,12 +1,12 @@
 ﻿namespace Netch.Models;
 
 /// <summary>
-///     TUN/TAP 适配器配置类
+///     TUN/TAP adapter configuration.
 /// </summary>
 public class TUNConfig
 {
     /// <summary>
-    ///     地址
+    ///     Adapter address.
     /// </summary>
     public string Address { get; set; } = "10.0.236.10";
 
@@ -16,22 +16,22 @@ public class TUNConfig
     public string DNS { get; set; } = Constants.DefaultPrimaryDNS;
 
     /// <summary>
-    ///     网关
+    ///     Gateway address.
     /// </summary>
     public string Gateway { get; set; } = "10.0.236.1";
 
     /// <summary>
-    ///     掩码
+    ///     Network mask.
     /// </summary>
     public string Netmask { get; set; } = "255.255.255.0";
 
     /// <summary>
-    ///     模式 2 下是否代理 DNS
+    ///     Whether to proxy DNS in mode 2.
     /// </summary>
     public bool ProxyDNS { get; set; } = false;
 
     /// <summary>
-    ///     使用自定义 DNS 设置
+    ///     Whether to use custom DNS settings.
     /// </summary>
     public bool UseCustomDNS { get; set; } = false;
 

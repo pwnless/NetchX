@@ -17,9 +17,9 @@ public partial class ProcessForm : BindingForm
     private readonly Redirector _mode;
 
     /// <summary>
-    ///     编辑模式
+    ///     Edits a process mode.
     /// </summary>
-    /// <param name="mode">模式</param>
+    /// <param name="mode">The mode to edit, or null to create one.</param>
     public ProcessForm(Mode? mode = null)
     {
         switch (mode)

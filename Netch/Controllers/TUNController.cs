@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Netch.Interfaces;
@@ -8,7 +9,6 @@ using Netch.Models.Modes;
 using Netch.Models.Modes.TunMode;
 using Netch.Servers;
 using Netch.Utils;
-using static Netch.Interops.tun2socks;
 
 namespace Netch.Controllers
 {
@@ -19,6 +19,8 @@ namespace Netch.Controllers
         private TunMode _mode = null!;
         private IPAddress? _serverRemoteAddress;
         private TUNConfig _tunConfig = null!;
+        private Process? _tun2SocksProcess;
+        private bool _tunRouteContextReady;
 
         private NetRoute _tun;
         private NetRoute _outbound;
@@ -37,119 +39,172 @@ namespace Netch.Controllers
             _tunConfig = Global.Settings.TUNTAP;
 
             if (server.RemoteHostname.ValueOrDefault() != null)
-                _serverRemoteAddress = await DnsUtils.LookupAsync(server.RemoteHostname!);
+                _serverRemoteAddress = await DnsUtils.LookupAsync(server.RemoteHostname!, AddressFamily.InterNetwork);
             else
-                _serverRemoteAddress = await DnsUtils.LookupAsync(server.Hostname);
+                _serverRemoteAddress = await DnsUtils.LookupAsync(server.Hostname, AddressFamily.InterNetwork);
 
             if (_serverRemoteAddress != null && IPAddress.IsLoopback(_serverRemoteAddress))
                 _serverRemoteAddress = null;
 
             _outbound = NetRoute.GetBestRouteTemplate();
-            CheckDriver();
+            await CheckDriverAsync();
 
-            // Wait for adapter to be created
-            for (var i = 0; i < 20; i++)
+            var serverAddress = await server.AutoResolveHostnameAsync(AddressFamily.InterNetwork);
+
+            try
             {
-                await Task.Delay(300);
+                #region DNS
+
+                if (!_tunConfig.UseCustomDNS)
+                {
+                    if (Global.Settings.AioDNS.ListenPort != 53)
+                        throw new MessageException("TunMode with tun2socks 2.7 requires AioDNS to listen on port 53.");
+
+                    await _aioDnsController.StartAsync();
+                }
+
+                #endregion
+
+                StartTun2Socks(serverAddress, server);
+                var tunIndex = await WaitForTunInterfaceIndexAsync(_tun2SocksProcess!);
+                _tun = NetRoute.TemplateBuilder(_tunConfig.Gateway, tunIndex);
+                _tunRouteContextReady = true;
+
+                if (!RouteHelper.CreateUnicastIP(AddressFamily.InterNetwork,
+                        _tunConfig.Address,
+                        (byte)Utils.Utils.SubnetToCidr(_tunConfig.Netmask),
+                        checked((uint)tunIndex)))
+                    throw new MessageException("Failed to assign the TUN IPv4 address.");
+
+                SetupRouteTable();
+            }
+            catch
+            {
                 try
                 {
-                    _tun.InterfaceIndex = NetworkInterfaceUtils.Get(ni => ni.Name.StartsWith(interfaceName)).GetIndex();
-                    break;
+                    await StopAsync();
                 }
-                catch
+                catch (Exception cleanupException)
                 {
-                    // ignored
+                    Log.Error(cleanupException, "TunMode startup cleanup failed");
                 }
+
+                throw;
             }
-
-            Dial(NameList.TYPE_ADAPMTU, "1500");
-            Dial(NameList.TYPE_BYPBIND, _outbound.Gateway);
-            Dial(NameList.TYPE_BYPLIST, "disabled");
-
-            #region Server
-
-            Dial(NameList.TYPE_TCPREST, "");
-            Dial(NameList.TYPE_TCPTYPE, "Socks5");
-
-            Dial(NameList.TYPE_UDPREST, "");
-            Dial(NameList.TYPE_UDPTYPE, "Socks5");
-
-            Dial(NameList.TYPE_TCPHOST, $"{await server.AutoResolveHostnameAsync()}:{server.Port}");
-
-            Dial(NameList.TYPE_UDPHOST, $"{await server.AutoResolveHostnameAsync()}:{server.Port}");
-
-            if (server.Auth())
-            {
-                Dial(NameList.TYPE_TCPUSER, server.Username!);
-                Dial(NameList.TYPE_TCPPASS, server.Password!);
-
-                Dial(NameList.TYPE_UDPUSER, server.Username!);
-                Dial(NameList.TYPE_UDPPASS, server.Password!);
-            }
-
-            #endregion
-
-            #region DNS
-
-            if (_tunConfig.UseCustomDNS)
-            {
-                Dial(NameList.TYPE_DNSADDR, DnsUtils.AppendPort(_tunConfig.DNS));
-            }
-            else
-            {
-                await _aioDnsController.StartAsync();
-                Dial(NameList.TYPE_DNSADDR, $"127.0.0.1:{Global.Settings.AioDNS.ListenPort}");
-            }
-
-            #endregion
-
-            if (!Init())
-                throw new MessageException("tun2socks start failed.");
-
-            var tunIndex = (int)RouteHelper.ConvertLuidToIndex(tun_luid());
-            _tun = NetRoute.TemplateBuilder(_tunConfig.Gateway, tunIndex);
-
-            RouteHelper.CreateUnicastIP(AddressFamily.InterNetwork,
-                _tunConfig.Address,
-                (byte)Utils.Utils.SubnetToCidr(_tunConfig.Netmask),
-                (ulong)tunIndex);
-
-            SetupRouteTable();
         }
 
         public async Task StopAsync()
         {
-            var tasks = new[]
+            try
             {
-                FreeAsync(),
-                Task.Run(ClearRouteTable),
-                _aioDnsController.StopAsync()
-            };
-
-            await Task.WhenAll(tasks);
+                if (_tunRouteContextReady)
+                    ClearRouteTable();
+            }
+            finally
+            {
+                _tunRouteContextReady = false;
+                await StopTun2SocksAsync();
+                await _aioDnsController.StopAsync();
+            }
         }
 
-        private void CheckDriver()
+        private async Task CheckDriverAsync()
         {
             string binDriver = Path.Combine(Global.NetchDir, Constants.WintunDllFile);
-            string sysDriver = $@"{Environment.SystemDirectory}\wintun.dll";
+            string tun2Socks = Path.Combine(Global.NetchDir, Constants.Tun2SocksFile);
+            if (!File.Exists(binDriver))
+                throw new MessageException($"wintun.dll is missing: {binDriver}");
 
-            var binHash = Utils.Utils.Sha256CheckSumAsync(binDriver).Result;
-            var sysHash = Utils.Utils.Sha256CheckSumAsync(sysDriver).Result;
-            Log.Information("Built-in  wintun.dll Hash: {Hash}", binHash);
-            Log.Information("Installed wintun.dll Hash: {Hash}", sysHash);
-            if (binHash == sysHash)
+            if (!File.Exists(tun2Socks))
+                throw new MessageException($"tun2socks.exe is missing: {tun2Socks}");
+
+            var version = FileVersionInfo.GetVersionInfo(binDriver).FileVersion;
+            Log.Information("Using application-local wintun.dll {Version} ({Hash})", version,
+                await Utils.Utils.Sha256CheckSumAsync(binDriver));
+        }
+
+        private void StartTun2Socks(string serverAddress, Socks5Server server)
+        {
+            string executable = Path.Combine(Global.NetchDir, Constants.Tun2SocksFile);
+            var startInfo = new ProcessStartInfo(executable)
+            {
+                WorkingDirectory = Path.GetDirectoryName(executable)!,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            startInfo.ArgumentList.Add("--device");
+            startInfo.ArgumentList.Add($"tun://{interfaceName}");
+            startInfo.ArgumentList.Add("--proxy");
+            startInfo.ArgumentList.Add(BuildSocks5Uri(serverAddress, server));
+            startInfo.ArgumentList.Add("--mtu");
+            startInfo.ArgumentList.Add("1500");
+            startInfo.ArgumentList.Add("--loglevel");
+            startInfo.ArgumentList.Add("warn");
+
+            var process = Process.Start(startInfo)
+                ?? throw new MessageException("Failed to launch tun2socks.exe.");
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrWhiteSpace(e.Data))
+                    Log.Debug("[tun2socks] {Message}", e.Data);
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrWhiteSpace(e.Data))
+                    Log.Warning("[tun2socks] {Message}", e.Data);
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            _tun2SocksProcess = process;
+        }
+
+        private static string BuildSocks5Uri(string serverAddress, Socks5Server server)
+        {
+            var endpoint = $"{serverAddress}:{server.Port}";
+            if (!server.Auth())
+                return $"socks5://{endpoint}";
+
+            return $"socks5://{Uri.EscapeDataString(server.Username!)}:{Uri.EscapeDataString(server.Password!)}@{endpoint}";
+        }
+
+        private async Task<int> WaitForTunInterfaceIndexAsync(Process process)
+        {
+            var timeout = Stopwatch.StartNew();
+            while (timeout.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                if (process.HasExited)
+                    throw new MessageException($"tun2socks.exe exited during startup (exit code {process.ExitCode}).");
+
+                var networkInterface = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(networkInterface =>
+                    string.Equals(networkInterface.Name, interfaceName, StringComparison.OrdinalIgnoreCase));
+                if (networkInterface != null)
+                    return networkInterface.GetIndex();
+
+                await Task.Delay(100);
+            }
+
+            throw new MessageException($"Timed out waiting for the {interfaceName} Wintun adapter.");
+        }
+
+        private async Task StopTun2SocksAsync()
+        {
+            var process = _tun2SocksProcess;
+            _tun2SocksProcess = null;
+            if (process == null)
                 return;
 
             try
             {
-                Log.Information("Copy wintun.dll to System Directory");
-                File.Copy(binDriver, sysDriver, true);
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+
+                await process.WaitForExitAsync();
             }
-            catch (Exception e)
+            finally
             {
-                Log.Error(e, "Copy wintun.dll failed");
-                throw new MessageException($"Failed to copy wintun.dll to system directory: {e.Message}");
+                process.Dispose();
             }
         }
 
@@ -185,6 +240,10 @@ namespace Netch.Controllers
             }
             else
             {
+                // tun2socks 2.7 does not provide the legacy tun_dial DNS
+                // interceptor. Configure the virtual interface explicitly so
+                // Windows sends its DNS requests to the local AioDNS service.
+                tunNetworkInterface.SetDns(IPAddress.Loopback.ToString());
                 RouteUtils.CreateRoute(_outbound.FillTemplate(Utils.Utils.GetHostFromUri(Global.Settings.AioDNS.ChinaDNS), 32));
                 RouteUtils.CreateRoute(_tun.FillTemplate(Utils.Utils.GetHostFromUri(Global.Settings.AioDNS.OtherDNS), 32));
             }
@@ -205,7 +264,16 @@ namespace Netch.Controllers
             }
 
             if (_mode != null)
+            {
+                RouteUtils.DeleteRouteFill(_tun, _mode.Handle);
                 RouteUtils.DeleteRouteFill(_outbound, _mode.Bypass);
+            }
+
+            if (_tunConfig != null && _tunConfig.UseCustomDNS && _tunConfig.ProxyDNS)
+                RouteUtils.DeleteRoute(_tun.FillTemplate(_tunConfig.DNS, 32));
+
+            if (_tunConfig != null && !_tunConfig.UseCustomDNS)
+                RouteUtils.DeleteRoute(_tun.FillTemplate(Utils.Utils.GetHostFromUri(Global.Settings.AioDNS.OtherDNS), 32));
         }
 
         #endregion

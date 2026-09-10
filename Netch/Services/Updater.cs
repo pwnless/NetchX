@@ -58,7 +58,7 @@ public class Updater
 
         foreach (var file in Directory.GetFiles(InstallDirectory, "*", SearchOption.AllDirectories))
         {
-            if (keepDirFullPath.Any(p => file.StartsWith(p)))
+            if (keepDirFullPath.Any(directory => IsPathUnderDirectory(file, directory)))
                 continue;
 
             if (KeepFiles.Contains(Path.GetFileName(file)))
@@ -74,6 +74,14 @@ public class Updater
                 throw;
             }
         }
+    }
+
+    private static bool IsPathUnderDirectory(string path, string directory)
+    {
+        var relativePath = Path.GetRelativePath(Path.GetFullPath(directory), Path.GetFullPath(path));
+        return !Path.IsPathRooted(relativePath) &&
+               relativePath != ".." &&
+               !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
     }
 
     private int Extract(string destDirName)

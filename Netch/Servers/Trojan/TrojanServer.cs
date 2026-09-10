@@ -14,17 +14,17 @@ public class TrojanServer : Server
     }
 
     /// <summary>
-    ///     密码
+    ///     Password.
     /// </summary>
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
-    ///     伪装域名
+    ///     Camouflage domain.
     /// </summary>
     public string? Host { get; set; }
 
     /// <summary>
-    ///     TLS 底层传输安全
+    ///     TLS transport security.
     /// </summary>
     public string TLSSecureType
     {

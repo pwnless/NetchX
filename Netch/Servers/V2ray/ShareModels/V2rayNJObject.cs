@@ -3,62 +3,62 @@
 public class V2rayNJObject
 {
     /// <summary>
-    ///     链接版本
+    ///     Link version
     /// </summary>
     public int v { get; set; } = 2;
 
     /// <summary>
-    ///     备注
+    ///     Remark
     /// </summary>
     public string ps { get; set; } = string.Empty;
 
     /// <summary>
-    ///     地址
+    ///     Address
     /// </summary>
     public string add { get; set; } = string.Empty;
 
     /// <summary>
-    ///     端口
+    ///     Port
     /// </summary>
     public ushort port { get; set; }
 
     /// <summary>
-    ///     用户 ID
+    ///     User ID
     /// </summary>
     public string id { get; set; } = string.Empty;
 
     /// <summary>
-    ///     额外 ID
+    ///     Alter ID
     /// </summary>
     public int aid { get; set; }
 
     /// <summary>
-    ///     加密方式 (security)
+    ///     Encryption method (security)
     /// </summary>
     public string scy { get; set; } = "auto";
 
     /// <summary>
-    ///     传输协议
+    ///     Transport protocol
     /// </summary>
     public string net { get; set; } = string.Empty;
 
     /// <summary>
-    ///     伪装类型
+    ///     Camouflage type
     /// </summary>
     public string type { get; set; } = string.Empty;
 
     /// <summary>
-    ///     伪装域名（HTTP，WS）
+    ///     Camouflage host (HTTP, WS)
     /// </summary>
     public string host { get; set; } = string.Empty;
 
     /// <summary>
-    ///     伪装路径/服务名称
+    ///     Camouflage path or service name
     /// </summary>
     public string path { get; set; } = string.Empty;
 
     /// <summary>
-    ///     是否使用 TLS
+    ///     Whether TLS is enabled
     /// </summary>
     public string tls { get; set; } = string.Empty;
 

@@ -1,108 +1,140 @@
-name: Netch Release CI
+name: Release
+
 on:
   push:
     tags:
-      - '*.*.*'
+      - "*.*.*"
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-    name: Build
+  release:
+    name: Build and publish release
     runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      NETCH_BUILD_V2RAY_FROM_SOURCE: "1"
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Check out source
+        uses: actions/checkout@v4
 
-      - name: Checksum
+      - name: Verify release tag
         shell: pwsh
         run: |
-          echo "SOURCE_NETCH_SHA256=$(.\sha256.ps1 .\Netch)" | Out-File -Append -Encoding UTF8 -FilePath $Env:GITHUB_ENV
-          echo "SOURCE_OTHER_SHA256=$(.\sha256.ps1 .\Other)" | Out-File -Append -Encoding UTF8 -FilePath $Env:GITHUB_ENV
-          echo "SOURCE_REDIRECTOR_SHA256=$(.\sha256.ps1 .\Redirector)" | Out-File -Append -Encoding UTF8 -FilePath $Env:GITHUB_ENV
-          echo "SOURCE_ROUTEHELPER_SHA256=$(.\sha256.ps1 .\RouteHelper)" | Out-File -Append -Encoding UTF8 -FilePath $Env:GITHUB_ENV
+          $source = Get-Content -LiteralPath .\Netch\Controllers\UpdateChecker.cs -Raw
+          $assemblyVersion = [regex]::Match($source, 'AssemblyVersion\s*=\s*@"(?<value>[^"]+)"')
+          $suffix = [regex]::Match($source, 'private const string Suffix\s*=\s*@"(?<value>[^"]*)"')
+          if (-not $assemblyVersion.Success -or -not $suffix.Success) {
+            throw 'Could not read the application release version from UpdateChecker.cs.'
+          }
 
-      - name: Cache Netch
-        uses: actions/cache@v3
+          $version = $assemblyVersion.Groups['value'].Value
+          if ($suffix.Groups['value'].Value) {
+            $version = "$version-$($suffix.Groups['value'].Value)"
+          }
+
+          if ($env:GITHUB_REF_NAME -ne $version) {
+            throw "Tag '$env:GITHUB_REF_NAME' does not match application version '$version'."
+          }
+
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
         with:
-          key: Netch-${{ runner.os }}-Netch-${{ env.SOURCE_NETCH_SHA256 }}
-          path: |
-            .\Netch\bin
+          dotnet-version: "10.0.x"
 
-      - name: Cache Redirector
-        uses: actions/cache@v3
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          key: Netch-${{ runner.os }}-Redirector-${{ env.SOURCE_REDIRECTOR_SHA256 }}
-          path: |
-            .\Redirector\bin
+          go-version: "1.22.x"
 
-      - name: Cache RouteHelper
-        uses: actions/cache@v3
-        with:
-          key: Netch-${{ runner.os }}-RouteHelper-${{ env.SOURCE_ROUTEHELPER_SHA256 }}
-          path: |
-            .\RouteHelper\bin
-
-      - name: Check Other
-        id: check_other
-        uses: andstor/file-existence-action@v2
-        with:
-          files: .\other\release\aiodns.bin
-
-      - name: Setup Go
-        uses: actions/setup-go@v3
-        if: steps.check_other.outputs.files_exists == 'false'
-        with:
-          go-version: stable
-
-      - name: Setup C++
+      - name: Set up MSYS2 compiler
         uses: msys2/setup-msys2@v2
-        if: steps.check_other.outputs.files_exists == 'false'
         with:
+          msystem: MINGW64
           update: true
-          release: true
-          install: base-devel git mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-libevent mingw-w64-x86_64-pcre2 mingw-w64-x86_64-freetype mingw-w64-x86_64-libpng mingw-w64-x86_64-bzip2 mingw-w64-x86_64-openssl mingw-w64-x86_64-mbedtls mingw-w64-x86_64-libsodium mingw-w64-x86_64-c-ares mingw-w64-x86_64-boost mingw-w64-x86_64-libmariadbclient unzip p7zip autoconf automake libtool
+          install: >-
+            mingw-w64-x86_64-gcc
 
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        if: steps.check_other.outputs.files_exists == 'false'
+      - name: Add MSYS2 compiler to PATH
+        shell: pwsh
+        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value 'C:\msys64\mingw64\bin'
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Show build tools
+        shell: pwsh
+        run: |
+          dotnet --info
+          go version
+          gcc --version
+          msbuild -version
+
+      - name: Run managed regression tests
+        shell: pwsh
+        run: dotnet test .\Tests\Tests.csproj --configuration Release --framework net10.0-windows
+
+      - name: Build complete release layout
+        shell: pwsh
+        run: .\build.ps1 -Configuration Release -OutputPath release
+
+      - name: Verify release layout
+        shell: pwsh
+        run: |
+          $requiredFiles = @(
+            'Netch.exe',
+            'bin\Redirector.bin',
+            'bin\RouteHelper.bin',
+            'bin\nfapi.dll',
+            'bin\nfdriver.sys',
+            'bin\aiodns.bin',
+            'bin\pcap2socks.exe',
+            'bin\tun2socks.exe',
+            'bin\v2ray-sn.exe',
+            'bin\wintun.dll',
+            'bin\GeoLite2-Country.mmdb'
+          )
+          $missingFiles = @($requiredFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path 'release' $_)) })
+          if ($missingFiles.Count -gt 0) {
+            throw "Release output is incomplete. Missing: $($missingFiles -join ', ')"
+          }
+
+      - name: Package release
+        id: package
+        shell: pwsh
+        run: |
+          $archive = "Netch-$env:RELEASE_VERSION-win-x64.zip"
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'netch-release-package'
+          $payloadRoot = Join-Path $packageRoot 'Netch'
+          New-Item -ItemType Directory -Path $payloadRoot -Force | Out-Null
+          Copy-Item -Path .\release\* -Destination $payloadRoot -Recurse -Force
+          Compress-Archive -LiteralPath $payloadRoot -DestinationPath $archive -CompressionLevel Optimal
+
+          $sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "sha256=$sha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          toolchain: nightly
-          profile: minimal
-
-      - name: Build
-        shell: pwsh
-        run: |
-          .\build.ps1 -Configuration Release -OutputPath release
-
-      - name: Package
-        shell: pwsh
-        run: |
-          7z a -mx9 Netch.7z release
-          7z rn Netch.7z release Netch
-
-      - name: Checksum
-        shell: pwsh
-        run: |
-          $hash=(Get-FileHash Netch.7z -Algorithm SHA256).Hash.ToLower()
-          echo "NETCH_SHA256=$hash" | Out-File -Append -Encoding UTF8 -FilePath $Env:GITHUB_ENV
-
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          prerelease: ${{ contains(github.ref, '-') }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
           draft: false
-          files: |
-            Netch.7z
+          files: ${{ steps.package.outputs.archive }}
           body: |
             [![](https://img.shields.io/badge/Telegram-Channel-blue)](https://t.me/netch_channel) [![](https://img.shields.io/badge/Telegram-Group-green)](https://t.me/netch_group)
-            ## Changelogs
-            * This is an automated deployment of GitHub Actions, the change log should be updated manually soon
-            
-            ## 更新日志
-            * 这是 GitHub Actions 自动化部署，更新日志应该很快会手动更新
 
-            ## 校验和
-            | 文件名 | SHA256 |
+            ## Changelog
+
+            This release was built and verified by GitHub Actions.
+
+            ## Checksums
+
+            | File name | SHA256 |
             | :- | :- |
-            | Netch.7z | ${{ env.Netch_SHA256 }} |
+            | ${{ steps.package.outputs.archive }} | ${{ steps.package.outputs.sha256 }} |

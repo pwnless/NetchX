@@ -1,5 +1,5 @@
 # Netch
-Prebuilt binaries for Netch version 1
+Prebuilt runtime binaries and data files distributed with Netch.
 
 ## aiodns
 https://github.com/netchx/netch

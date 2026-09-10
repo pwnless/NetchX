@@ -10,25 +10,29 @@ namespace Netch.Interops;
 public static unsafe class RouteHelper
 {
     [DllImport("RouteHelper.bin", CallingConvention = CallingConvention.Cdecl)]
-    public static extern ulong ConvertLuidToIndex(ulong id);
+    public static extern uint ConvertLuidToIndex(ulong id);
 
     [DllImport("RouteHelper.bin", CallingConvention = CallingConvention.Cdecl)]
-    public static extern bool CreateIPv4(string address, string netmask, ulong index);
+    public static extern bool CreateIPv4(string address, string netmask, uint index);
 
     [DllImport("RouteHelper.bin", CallingConvention = CallingConvention.Cdecl)]
-    public static extern bool CreateUnicastIP(AddressFamily inet, string address, byte cidr, ulong index);
+    public static extern bool CreateUnicastIP(AddressFamily inet, string address, byte cidr, uint index);
 
-    public static bool CreateUnicastIPCS(AddressFamily inet, string address, byte cidr, ulong index)
+    public static bool CreateUnicastIPCS(AddressFamily inet, string address, byte cidr, uint index)
     {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(6, 3, 0, 0))
+            return false;
+
         MIB_UNICASTIPADDRESS_ROW addr;
         InitializeUnicastIpAddressEntry(&addr);
 
-        addr.InterfaceIndex = (uint)index;
+        addr.InterfaceIndex = index;
         addr.OnLinkPrefixLength = cidr;
 
         if (inet == AddressFamily.InterNetwork)
         {
             addr.Address.Ipv4.sin_family = (ushort)ADDRESS_FAMILY.AF_INET;
+#pragma warning disable CA1416 // inet_pton is available on all Windows versions supported by the application.
             if (inet_pton((int)inet, address, &addr.Address.Ipv4.sin_addr) == 0)
                 return false;
         }
@@ -37,6 +41,7 @@ public static unsafe class RouteHelper
             addr.Address.Ipv6.sin6_family = (ushort)ADDRESS_FAMILY.AF_INET6;
             if (inet_pton((int)inet, address, &addr.Address.Ipv6.sin6_addr) == 0)
                 return false;
+#pragma warning restore CA1416
         }
         else
         {
@@ -100,11 +105,8 @@ public static unsafe class RouteHelper
     }
 
     [DllImport("RouteHelper.bin", CallingConvention = CallingConvention.Cdecl)]
-    public static extern bool RefreshIPTable(AddressFamily inet, ulong index);
+    public static extern bool CreateRoute(AddressFamily inet, string address, byte cidr, string gateway, uint index, int metric);
 
     [DllImport("RouteHelper.bin", CallingConvention = CallingConvention.Cdecl)]
-    public static extern bool CreateRoute(AddressFamily inet, string address, byte cidr, string gateway, ulong index, int metric);
-
-    [DllImport("RouteHelper.bin", CallingConvention = CallingConvention.Cdecl)]
-    public static extern bool DeleteRoute(AddressFamily inet, string address, byte cidr, string gateway, ulong index, int metric);
+    public static extern bool DeleteRoute(AddressFamily inet, string address, byte cidr, string gateway, uint index, int metric);
 }

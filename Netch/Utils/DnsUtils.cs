@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.VisualStudio.Threading;
@@ -7,74 +7,83 @@ namespace Netch.Utils;
 
 public static class DnsUtils
 {
-    private static readonly AsyncSemaphore Lock = new(1);
+    private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(5);
+    private static readonly ConcurrentDictionary<CacheKey, CacheEntry> Cache = new();
+    private static readonly JoinableTaskFactory JoinableTaskFactory = new(new JoinableTaskContext());
+    private static readonly ConcurrentDictionary<CacheKey, AsyncLazy<IPAddress?>> InFlight = new();
+    private static long _cacheGeneration;
 
-    /// <summary>
-    ///     缓存
-    /// </summary>
-    private static readonly Hashtable Cache = new();
-    private static readonly Hashtable Cache6 = new();
+    private readonly record struct CacheKey(string Hostname, AddressFamily AddressFamily);
+
+    private sealed record CacheEntry(IPAddress Address, DateTimeOffset ExpiresAt);
 
     public static async Task<IPAddress?> LookupAsync(string hostname, AddressFamily inet = AddressFamily.Unspecified, int timeout = 3000)
     {
-        using var _ = await Lock.EnterAsync();
+        if (string.IsNullOrWhiteSpace(hostname) || timeout <= 0)
+            return null;
+
+        if (inet is not (AddressFamily.Unspecified or AddressFamily.InterNetwork or AddressFamily.InterNetworkV6))
+            throw new ArgumentOutOfRangeException(nameof(inet));
+
+        var key = new CacheKey(hostname, inet);
+        if (Cache.TryGetValue(key, out var cached))
+        {
+            if (cached.ExpiresAt > DateTimeOffset.UtcNow)
+                return cached.Address;
+
+            Cache.TryRemove(key, out _);
+        }
+
+        var generation = Interlocked.Read(ref _cacheGeneration);
+        var lazy = InFlight.GetOrAdd(key, _ => new AsyncLazy<IPAddress?>(
+            () => LookupNoCacheAsync(key, timeout, generation),
+            JoinableTaskFactory));
+
         try
         {
-            var cacheResult = inet switch
-            {
-                AddressFamily.Unspecified => (IPAddress?)(Cache[hostname] ?? Cache6[hostname]),
-                AddressFamily.InterNetwork => (IPAddress?)Cache[hostname],
-                AddressFamily.InterNetworkV6 => (IPAddress?)Cache6[hostname],
-                _ => throw new ArgumentOutOfRangeException()
-            };
-
-            if (cacheResult != null)
-                return cacheResult;
-
-            return await LookupNoCacheAsync(hostname, inet, timeout);
+            return await lazy.GetValueAsync().ConfigureAwait(false);
         }
         catch (Exception e)
         {
             Log.Verbose(e, "Lookup hostname {Hostname} failed", hostname);
             return null;
         }
+        finally
+        {
+            ((ICollection<KeyValuePair<CacheKey, AsyncLazy<IPAddress?>>>)InFlight)
+                .Remove(new KeyValuePair<CacheKey, AsyncLazy<IPAddress?>>(key, lazy));
+        }
     }
 
-    private static async Task<IPAddress?> LookupNoCacheAsync(string hostname, AddressFamily inet = AddressFamily.Unspecified, int timeout = 3000)
+    private static async Task<IPAddress?> LookupNoCacheAsync(CacheKey key, int timeout, long generation)
     {
-        using var task = Dns.GetHostAddressesAsync(hostname);
-        using var resTask = await Task.WhenAny(task, Task.Delay(timeout));
-
-        if (resTask == task)
+        var lookupTask = Dns.GetHostAddressesAsync(key.Hostname);
+        IPAddress[] addresses;
+        try
         {
-            var addresses = await task;
-
-            var result = addresses.FirstOrDefault(i => inet == AddressFamily.Unspecified || inet == i.AddressFamily);
-            if (result == null)
-                return null;
-
-            switch (result.AddressFamily)
-            {
-                case AddressFamily.InterNetwork:
-                    Cache.Add(hostname, result);
-                    break;
-                case AddressFamily.InterNetworkV6:
-                    Cache6.Add(hostname, result);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-
-            return result;
+            addresses = await lookupTask.WaitAsync(TimeSpan.FromMilliseconds(timeout)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _ = lookupTask.ContinueWith(task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return null;
         }
 
-        return null;
+        var result = addresses.FirstOrDefault(address => key.AddressFamily == AddressFamily.Unspecified || address.AddressFamily == key.AddressFamily);
+        if (result != null && generation == Interlocked.Read(ref _cacheGeneration))
+            Cache[key] = new CacheEntry(result, DateTimeOffset.UtcNow.Add(CacheLifetime));
+
+        return result;
     }
 
     public static void ClearCache()
     {
+        Interlocked.Increment(ref _cacheGeneration);
         Cache.Clear();
-        Cache6.Clear();
+        InFlight.Clear();
     }
 
     public static string AppendPort(string host, ushort port = 53)

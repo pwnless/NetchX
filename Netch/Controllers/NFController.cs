@@ -190,9 +190,9 @@ public class NFController : IModeController
     }
 
     /// <summary>
-    ///     安装 NF 驱动
+    ///     Installs the NetFilter driver.
     /// </summary>
-    /// <returns>驱动是否安装成功</returns>
+    /// <returns>Whether driver installation succeeded.</returns>
     private static void InstallDriver()
     {
         Log.Information("Install netfilter2 driver");
@@ -211,7 +211,7 @@ public class NFController : IModeController
             throw new MessageException($"Copy netfilter2.sys failed\n{e.Message}");
         }
 
-        // 注册驱动文件
+        // Register the driver file.
         if (Interops.Redirector.aio_register("netfilter2"))
         {
             Log.Information("Install netfilter2 driver finished");
@@ -223,9 +223,9 @@ public class NFController : IModeController
     }
 
     /// <summary>
-    ///     卸载 NF 驱动
+    ///     Uninstalls the NetFilter driver.
     /// </summary>
-    /// <returns>是否成功卸载</returns>
+    /// <returns>Whether driver removal succeeded.</returns>
     public static bool UninstallDriver()
     {
         Log.Information("Uninstall netfilter2");
