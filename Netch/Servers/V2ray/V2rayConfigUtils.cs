@@ -72,6 +72,7 @@ public static class V2rayConfigUtils
             }
             case VLESSServer vless:
             {
+                var flow = GetVlessFlow(vless);
                 outbound.protocol = "vless";
                 outbound.settings.vnext = new[]
                 {
@@ -84,7 +85,7 @@ public static class V2rayConfigUtils
                             new User
                             {
                                 id = getUUID(vless.UserID),
-                                flow = vless.TLSSecureType == "xtls" ? "xtls-rprx-direct" : "",
+                                flow = flow,
                                 encryption = vless.EncryptMethod
                             }
                         }
@@ -96,8 +97,11 @@ public static class V2rayConfigUtils
 
                 outbound.streamSettings = boundStreamSettings(vless);
 
-                if (vless.TLSSecureType == "xtls")
+                if (!string.IsNullOrEmpty(flow))
                 {
+                    // Vision controls the underlying TCP flow itself. Keeping
+                    // mux.cool off is the compatible and least surprising
+                    // default for both TLS and REALITY deployments.
                     outbound.mux.enabled = false;
                     outbound.mux.concurrency = -1;
                 }
@@ -169,38 +173,8 @@ public static class V2rayConfigUtils
                     };
                 }
                 break;
-             case ShadowsocksRServer ssr:
-                outbound.protocol = "shadowsocks";
-                outbound.settings.servers = new[]
-                {
-                    new ShadowsocksServerItem
-                    {
-                        address = await server.AutoResolveHostnameAsync(),
-                        port = server.Port,
-                        method = ssr.EncryptMethod,
-                        password = ssr.Password,
-                    }
-                };
-                outbound.settings.plugin = "shadowsocksr";
-                outbound.settings.pluginArgs = new string[]
-                {
-                    "--obfs=" + ssr.OBFS,
-                    "--obfs-param=" + ssr.OBFSParam ?? "",
-                    "--protocol=" + ssr.Protocol,
-                    "--protocol-param=" + ssr.ProtocolParam ?? ""
-                };
-
-                if (Global.Settings.V2RayConfig.TCPFastOpen)
-                {
-                    outbound.streamSettings = new StreamSettings
-                    {
-                        sockopt = new Sockopt
-                        {
-                            tcpFastOpen = true
-                        }
-                    };
-                }
-                break;
+            case ShadowsocksRServer:
+                throw new MessageException("ShadowsocksR is not supported by the bundled Xray-core runtime. Use a standard Shadowsocks profile or install a dedicated SSR controller.");
              case TrojanServer trojan:
                 outbound.protocol = "trojan";
                 outbound.settings.servers = new[]
@@ -210,34 +184,17 @@ public static class V2rayConfigUtils
                         address = await server.AutoResolveHostnameAsync(),
                         port = server.Port,
                         method = "",
-                        password = trojan.Password,
-                        flow = trojan.TLSSecureType == "xtls" ? "xtls-rprx-direct" : ""
+                        password = trojan.Password
                     }
                 };
 
                 outbound.streamSettings = new StreamSettings
                 {
-                    network = "tcp",
-                    security = trojan.TLSSecureType
+                    method = "raw",
+                    security = NormalizeSecurity(trojan.TLSSecureType, false)
                 };
-                if (trojan.TLSSecureType != "none")
-                {
-                    var tlsSettings = new TlsSettings
-                    {
-                        allowInsecure = Global.Settings.V2RayConfig.AllowInsecure,
-                        serverName = trojan.Host ?? ""
-                    };
-
-                    switch (trojan.TLSSecureType)
-                    {
-                        case "tls":
-                            outbound.streamSettings.tlsSettings = tlsSettings;
-                            break;
-                        case "xtls":
-                            outbound.streamSettings.xtlsSettings = tlsSettings;
-                            break;
-                    }
-                }
+                if (outbound.streamSettings.security == "tls")
+                    outbound.streamSettings.tlsSettings = BuildTlsSettings(trojan.Host);
 
                 if (Global.Settings.V2RayConfig.TCPFastOpen)
                 {
@@ -269,26 +226,8 @@ public static class V2rayConfigUtils
                 }
                 break;
 
-            case SSHServer ssh:
-                outbound.protocol = "ssh";
-                outbound.settings.address = await server.AutoResolveHostnameAsync();
-                outbound.settings.port = server.Port;
-                outbound.settings.user = ssh.User;
-                outbound.settings.password = ssh.Password;
-                outbound.settings.privateKey = ssh.PrivateKey;
-                outbound.settings.publicKey = ssh.PublicKey;
-                
-                if (Global.Settings.V2RayConfig.TCPFastOpen)
-                {
-                    outbound.streamSettings = new StreamSettings
-                    {
-                        sockopt = new Sockopt
-                        {
-                            tcpFastOpen = true
-                        }
-                    };
-                }
-                break;
+            case SSHServer:
+                throw new MessageException("SSH is not supported by the bundled Xray-core runtime. Use a dedicated SSH controller for this profile.");
         }
 
         return outbound;
@@ -296,42 +235,55 @@ public static class V2rayConfigUtils
 
     private static StreamSettings boundStreamSettings(VMessServer server)
     {
-        // https://xtls.github.io/config/transports
+        var method = NormalizeTransport(server.TransferProtocol);
+        var isVless = server is VLESSServer;
+        var security = NormalizeSecurity(server.TLSSecureType, isVless);
+
+        if (server is VLESSServer vless && !string.IsNullOrEmpty(GetVlessFlow(vless)))
+        {
+            if (method != "raw" || security is not ("tls" or "reality"))
+                throw new MessageException("XTLS Vision requires VLESS over raw transport with TLS or REALITY security in Xray-core.");
+        }
 
         var streamSettings = new StreamSettings
         {
-            network = server.TransferProtocol,
-            security = server.TLSSecureType
+            method = method,
+            security = security
         };
 
-        if (server.TLSSecureType != "none")
+        if (security == "tls")
         {
-            var tlsSettings = new TlsSettings
-            {
-                allowInsecure = Global.Settings.V2RayConfig.AllowInsecure,
-                serverName = server.ServerName.ValueOrDefault() ?? server.Host.SplitOrDefault()?[0]
-            };
+            streamSettings.tlsSettings = BuildTlsSettings(
+                server.ServerName.ValueOrDefault() ?? server.Host.SplitOrDefault()?[0],
+                server.RealityFingerprint);
+        }
+        else if (security == "reality")
+        {
+            if (method is not ("raw" or "xhttp" or "grpc"))
+                throw new MessageException("REALITY only supports raw, xhttp, or grpc transport in Xray-core.");
 
-            switch (server.TLSSecureType)
+            if (string.IsNullOrWhiteSpace(server.RealityPublicKey))
+                throw new MessageException("REALITY requires the server public key.");
+
+            streamSettings.realitySettings = new RealitySettings
             {
-                case "tls":
-                    streamSettings.tlsSettings = tlsSettings;
-                    break;
-                case "xtls":
-                    streamSettings.xtlsSettings = tlsSettings;
-                    break;
-            }
+                serverName = server.ServerName.ValueOrDefault() ?? server.Host.SplitOrDefault()?[0] ?? string.Empty,
+                fingerprint = string.IsNullOrWhiteSpace(server.RealityFingerprint) ? "chrome" : server.RealityFingerprint,
+                password = server.RealityPublicKey,
+                shortId = server.RealityShortId,
+                mldsa65Verify = server.RealityMldsa65Verify,
+                spiderX = server.RealitySpiderX
+            };
         }
 
-        switch (server.TransferProtocol)
+        switch (method)
         {
-            case "tcp":
-
-                streamSettings.tcpSettings = new TcpSettings
+            case "raw":
+                streamSettings.rawSettings = new TcpSettings
                 {
                     header = new
                     {
-                        type = server.FakeType,
+                        type = server.FakeType is "none" or "http" ? server.FakeType : "none",
                         request = server.FakeType switch
                         {
                             "none" => null,
@@ -349,7 +301,7 @@ public static class V2rayConfigUtils
                 };
 
                 break;
-            case "ws":
+            case "websocket":
 
                 streamSettings.wsSettings = new WsSettings
                 {
@@ -361,7 +313,7 @@ public static class V2rayConfigUtils
                 };
 
                 break;
-            case "kcp":
+            case "mkcp":
 
                 streamSettings.kcpSettings = new KcpSettings
                 {
@@ -380,25 +332,20 @@ public static class V2rayConfigUtils
                 };
 
                 break;
-            case "h2":
-
-                streamSettings.httpSettings = new HttpSettings
+            case "xhttp":
+                streamSettings.xhttpSettings = new XHttpSettings
                 {
-                    host = server.Host.SplitOrDefault(),
-                    path = server.Path.ValueOrDefault()
+                    host = server.Host.ValueOrDefault() ?? string.Empty,
+                    path = server.Path.ValueOrDefault() ?? "/",
+                    mode = string.IsNullOrWhiteSpace(server.XHttpMode) ? "auto" : server.XHttpMode
                 };
 
                 break;
-            case "quic":
-
-                streamSettings.quicSettings = new QuicSettings
+            case "httpupgrade":
+                streamSettings.httpupgradeSettings = new HttpUpgradeSettings
                 {
-                    security = server.QUICSecure,
-                    key = server.QUICSecret,
-                    header = new
-                    {
-                        type = server.FakeType
-                    }
+                    host = server.Host.ValueOrDefault() ?? string.Empty,
+                    path = server.Path.ValueOrDefault() ?? "/"
                 };
 
                 break;
@@ -406,13 +353,21 @@ public static class V2rayConfigUtils
 
                 streamSettings.grpcSettings = new GrpcSettings
                 {
+                    authority = server.Host.ValueOrDefault() ?? string.Empty,
                     serviceName = server.Path,
                     multiMode = server.FakeType == "multi"
                 };
 
                 break;
-            default:
-                throw new MessageException($"transfer protocol \"{server.TransferProtocol}\" not implemented yet");
+            case "hysteria":
+                if (security != "tls")
+                    throw new MessageException("Hysteria transport requires TLS security in Xray-core.");
+
+                streamSettings.hysteriaSettings = new HysteriaSettings
+                {
+                    auth = server.HysteriaAuth
+                };
+                break;
         }
 
         if (Global.Settings.V2RayConfig.TCPFastOpen)
@@ -424,6 +379,61 @@ public static class V2rayConfigUtils
         }
 
         return streamSettings;
+    }
+
+    private static TlsSettings BuildTlsSettings(string? serverName, string? fingerprint = null)
+    {
+        return new TlsSettings
+        {
+            allowInsecure = Global.Settings.V2RayConfig.AllowInsecure,
+            serverName = serverName ?? string.Empty,
+            fingerprint = string.IsNullOrWhiteSpace(fingerprint) ? "chrome" : fingerprint
+        };
+    }
+
+    private static string GetVlessFlow(VLESSServer server)
+    {
+        var flow = !string.IsNullOrEmpty(server.Flow)
+            ? server.Flow
+            // Xray 26 removed the standalone XTLS security layer. This
+            // preserves the intent of a persisted legacy Netch profile using
+            // Vision.
+            : server.TLSSecureType == "xtls" ? "xtls-rprx-vision" : string.Empty;
+
+        if (!VLESSGlobal.Flows.Contains(flow))
+            throw new MessageException($"Unsupported Xray-core VLESS flow \"{flow}\".");
+
+        return flow;
+    }
+
+    private static string NormalizeSecurity(string security, bool supportsVision)
+    {
+        return security switch
+        {
+            "" or "none" => "none",
+            "tls" => "tls",
+            "reality" => "reality",
+            "xtls" when supportsVision => "tls",
+            "xtls" => throw new MessageException("Xray-core removed legacy XTLS. Use TLS or REALITY, and XTLS Vision for VLESS."),
+            _ => throw new MessageException($"Unsupported Xray-core transport security \"{security}\".")
+        };
+    }
+
+    private static string NormalizeTransport(string transport)
+    {
+        return transport switch
+        {
+            "raw" or "tcp" => "raw",
+            "xhttp" or "splithttp" => "xhttp",
+            "mkcp" or "kcp" => "mkcp",
+            "websocket" or "ws" => "websocket",
+            "grpc" => "grpc",
+            "httpupgrade" => "httpupgrade",
+            "hysteria" => "hysteria",
+            "h2" or "h3" or "http" => throw new MessageException("Xray-core removed HTTP/2 transport. Change this profile to XHTTP."),
+            "quic" => throw new MessageException("Xray-core removed the legacy QUIC transport. Change this profile to XHTTP stream-one or Hysteria."),
+            _ => throw new MessageException($"Unsupported Xray-core transport method \"{transport}\".")
+        };
     }
 
     public static string getUUID(string uuid)

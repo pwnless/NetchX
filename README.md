@@ -23,7 +23,7 @@
   <a href="#whats-new-since-197">1.9.7 → 2.0.0</a>
 </p>
 
-> The current release line is **2.0.0**. It retains Netch's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
+> The current release line is **2.0.1**. It retains Netch's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
 
 ## What's new since 1.9.7
 
@@ -38,6 +38,7 @@ Version 2.0.0 is more than a version-number refresh. It addresses long-standing 
 | DNS | Bounded DNS workers reuse their transport. Transaction IDs are replaced and matched so a late response from a timed-out query cannot be delivered to a later query. |
 | Reliability and boundaries | Fixed SOCKS5 RFC 1929 credential truncation, SOCKS/UDP short-packet handling, blocking ICMP callbacks, startup-cleanup races, and several shutdown-order defects. |
 | TUN and packaging | Updated to application-local **Wintun 0.14.1** and **tun2socks 2.7** without overwriting the system `wintun.dll`. The build validates critical external components and GeoIP download metadata. |
+| Xray core | Bundles current **Xray-core** instead of the obsolete SagerNet V2Ray fork. VLESS and VMess profiles support RAW, XHTTP, mKCP, gRPC, WebSocket, HTTPUpgrade, and Hysteria transports; REALITY; and VLESS XTLS Vision. |
 
 ### Performance principles
 
@@ -61,15 +62,24 @@ The local loopback test suite covers 128 concurrent TCP connections with strict 
 
 - [SOCKS5](https://www.rfc-editor.org/rfc/rfc1928)
 - [Shadowsocks](https://shadowsocks.org/)
-- [ShadowsocksR](https://github.com/shadowsocksrr/shadowsocksr-libev)
+- [ShadowsocksR](https://github.com/shadowsocksrr/shadowsocksr-libev) (legacy fallback)
+- SSH (legacy fallback)
 - [WireGuard](https://www.wireguard.com/)
 - [Trojan](https://trojan-gfw.github.io/trojan/)
 - [VMess](https://www.v2fly.org/)
 - [VLESS](https://xtls.github.io/)
 
+Xray-core is the bundled runtime for all Xray-supported profiles. ShadowsocksR and SSH use a separately bundled, legacy SagerNet fallback because current Xray no longer implements those outbounds. That fallback is compatibility-only; it does not provide Xray's modern transports, REALITY, or Vision features.
+
+### Modern Xray transports
+
+VLESS and VMess editors expose Xray's current `raw`, `xhttp`, `mkcp`, `grpc`, `websocket`, `httpupgrade`, and `hysteria` transports. VLESS also exposes the XTLS Vision flows. REALITY profiles require a server name, public key, fingerprint, and optional short ID and SpiderX; Xray permits REALITY only with RAW, XHTTP, or gRPC. Vision requires VLESS over RAW with TLS or REALITY.
+
+Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transport names. Legacy HTTP/2, QUIC, and standalone `xtls` security have been removed by Xray-core, so Netch asks users to migrate those profiles to XHTTP, Hysteria, or TLS/REALITY with Vision as appropriate.
+
 ## Quick start
 
-1. Download `Netch-2.0.0-win-x64.zip` for your system from [Releases](https://github.com/NetchX/Netch/releases).
+1. Download `Netch-2.0.1-win-x64.zip` for your system from [Releases](https://github.com/NetchX/Netch/releases).
 2. **Extract the entire archive** to a writable directory. `bin`, `i18n`, and `mode` alongside `Netch.exe` are required at runtime.
 3. Run `Netch.exe` as an administrator, add or import a server, select a mode, and start it.
 
@@ -91,6 +101,8 @@ The local loopback test suite covers 128 concurrent TCP connections with strict 
 ```
 
 The script publishes the main application, builds `Redirector` and `RouteHelper`, stages external components, and verifies critical package files. The result is written to `build\`.
+
+The Xray staging script uses the checked-out sibling release at `..\xray-core\release` by default. When that directory is absent—such as on GitHub Actions—it downloads the pinned Xray 26.3.27 Windows archive and verifies both the archive and its extracted runtime files. Set `NETCH_XRAY_RELEASE` to another extracted, hash-pinned Xray release directory when building elsewhere.
 
 ### Run managed regression tests
 

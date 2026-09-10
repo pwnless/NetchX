@@ -18,7 +18,7 @@ internal class VLESSForm : ServerForm
             server.EncryptMethod);
 
         CreateComboBox("TransferProtocol",
-            "Transfer Protocol",
+            "Xray Transport",
             VLESSGlobal.TransferProtocols,
             s => server.TransferProtocol = s,
             server.TransferProtocol);
@@ -28,11 +28,16 @@ internal class VLESSForm : ServerForm
             s => server.PacketEncoding = s,
             server.PacketEncoding);
 
+        CreateComboBox("Flow", "XTLS Flow", VLESSGlobal.Flows, s => server.Flow = s, server.Flow);
+
         CreateComboBox("FakeType", "Fake Type", VLESSGlobal.FakeTypes, s => server.FakeType = s, server.FakeType);
         CreateTextBox("Host", "Host", s => true, s => server.Host = s, server.Host);
         CreateTextBox("Path", "Path", s => true, s => server.Path = s, server.Path);
-        CreateComboBox("QUICSecurity", "QUIC Security", VLESSGlobal.QUIC, s => server.QUICSecure = s, server.QUICSecure);
-        CreateTextBox("QUICSecret", "QUIC Secret", s => true, s => server.QUICSecret = s, server.QUICSecret);
+        CreateComboBox("XHttpMode",
+            "XHTTP Mode",
+            new List<string> { "auto", "packet-up", "stream-up", "stream-one" },
+            s => server.XHttpMode = s,
+            server.XHttpMode);
         CreateComboBox("UseMux",
             "Use Mux",
             new List<string> { "", "true", "false" },
@@ -40,6 +45,16 @@ internal class VLESSForm : ServerForm
             server.UseMux?.ToString().ToLower() ?? "");
 
         CreateComboBox("TLSSecure", "TLS Secure", VLESSGlobal.TLSSecure, s => server.TLSSecureType = s, server.TLSSecureType);
+        CreateTextBox("RealityPublicKey", "Reality Public Key", s => true, s => server.RealityPublicKey = s, server.RealityPublicKey);
+        CreateTextBox("RealityShortId", "Reality Short ID", s => true, s => server.RealityShortId = s, server.RealityShortId);
+        CreateComboBox("RealityFingerprint",
+            "TLS/REALITY Fingerprint",
+            new List<string> { "chrome", "firefox", "safari", "edge", "android", "ios", "360", "qq", "random", "randomized" },
+            s => server.RealityFingerprint = s,
+            server.RealityFingerprint);
+        CreateTextBox("RealitySpiderX", "Reality SpiderX", s => true, s => server.RealitySpiderX = s, server.RealitySpiderX);
+        CreateTextBox("RealityMldsa65Verify", "ML-DSA-65 Verify Key", s => true, s => server.RealityMldsa65Verify = s, server.RealityMldsa65Verify);
+        CreateTextBox("HysteriaAuth", "Hysteria 2 Auth", s => true, s => server.HysteriaAuth = s, server.HysteriaAuth);
     }
 
     protected override string TypeName { get; } = "VLESS";

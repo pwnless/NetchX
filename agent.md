@@ -6,14 +6,14 @@ This document describes the current codebase and the constraints that apply when
 
 Netch is a Windows x64 proxy client. The WinForms application selects a server and a traffic mode. The selected mode forwards traffic to either a directly configured SOCKS5 server or a local SOCKS5 endpoint provided by a protocol controller.
 
-The current release line is `2.0.0`:
+The current release line is `2.0.1`:
 
 - `Netch/Netch.csproj` targets `net10.0-windows` and carries matching package metadata.
 - `common.props` defines `net10.0-windows`, `win-x64`, C# `latest`, and nullable-reference support for SDK-style projects.
 - `Netch/Controllers/UpdateChecker.cs` contains the displayed and release-comparison version.
 - `Netch/Properties/AssemblyInfo.cs` supplies the effective PE assembly, file, and informational versions because `GenerateAssemblyInfo` is disabled.
 
-When changing the version, update all of these values together. The currently published executable reports assembly and file version `2.0.0.0` and product version `2.0.0`.
+When changing the version, update all of these values together. The currently published executable reports assembly and file version `2.0.1.0` and product version `2.0.1`.
 
 The main application is Per-Monitor V2 DPI aware. `Program.Main` must call `Application.SetHighDpiMode(HighDpiMode.PerMonitorV2)` before any WinForms object, `Global` member, or form is created. Forms use `AutoScaleMode.Dpi` with a 96-DPI design baseline. Do not restore font-based scaling, DPI-unaware mode, or a conflicting DPI declaration in `App.manifest`.
 
@@ -28,7 +28,7 @@ The main application is Per-Monitor V2 DPI aware. `Program.Main` must call `Appl
 | `RedirectorTester/` | .NET Framework 4.8 x64 end-to-end test utility for the native driver path. |
 | `RouteHelper/` | Native C++ Windows IP Helper API wrapper used to configure TUN addresses and routes. It builds `RouteHelper.bin`. |
 | `Storage/` | Runtime data copied into a release, including modes, translations, DNS configuration, the NetFilter driver, and the runtime component inventory. |
-| `Other/` | Build and staging inputs for AioDNS, pcap2socks, tun2socks, v2ray-sn, Wintun, and compatibility sources. |
+| `Other/` | Build and staging inputs for AioDNS, pcap2socks, tun2socks, Xray-core, Wintun, and compatibility sources. |
 | `wintun/` | Local Wintun distribution used by the Wintun staging script. |
 | `pcap2socks/` | Local pcap2socks distribution used by the staging script. |
 | `tun2socks.exe` | Local tun2socks 2.7 release binary used by the staging script. |
@@ -45,14 +45,16 @@ WinForms UI
   +-- MainController.StartAsync(server, mode)
         |
         +-- Resolve the server and prepare firewall and port state
-        +-- Use a direct Socks5Server or start V2rayController
+        +-- Use a direct Socks5Server or start XrayController
         +-- Get the selected IModeController from ModeService
         +-- Start the ProcessMode, TunMode, or ShareMode controller
 ```
 
 `MainController` owns the active server, mode, server controller, mode controller, and SOCKS5 endpoint. An `AsyncSemaphore` serializes startup and shutdown. If startup fails while the semaphore is held, `StartAsync` calls its private `StopCoreAsync` method before releasing the semaphore. Do not replace that with the public `StopAsync` method: releasing the semaphore first can let another startup install controllers that the failed startup then stops.
 
-Startup resolves the server hostname, warms the configured STUN hostname lookup, adds Netch firewall rules, chooses a mode controller, and frees a conflicting application-owned TCP listener if needed. A directly selected SOCKS5 server is used when its authentication requirements are compatible with the selected mode. Other server types start `V2rayController`, which exposes a local SOCKS5 endpoint for the mode.
+Startup resolves the server hostname, warms the configured STUN hostname lookup, adds Netch firewall rules, chooses a mode controller, and frees a conflicting application-owned TCP listener if needed. A directly selected SOCKS5 server is used when its authentication requirements are compatible with the selected mode. Other compatible server types start `XrayController`, except SSH and ShadowsocksR, which start `LegacyV2rayController`; both expose a local SOCKS5 endpoint for the mode.
+
+`Other/xray/build.ps1` stages `xray.exe`, `geoip.dat`, and `geosite.dat` from the sibling `../xray-core/release` checkout, from `NETCH_XRAY_RELEASE` when supplied, or by downloading the pinned Xray 26.3.27 Windows archive when neither is available (the CI path). It verifies the archive and every staged file. `XrayController` runs `bin/xray.exe` with the generated configuration. The Xray configuration generator uses current `method` fields (`raw`, `xhttp`, `mkcp`, `grpc`, `websocket`, `httpupgrade`, and `hysteria`) and supports TLS, REALITY, and VLESS XTLS Vision. The VLESS and VMess editors expose those Xray transports, XHTTP mode, TLS/REALITY fingerprint, REALITY keys, short ID, SpiderX, ML-DSA-65 verify key, and Hysteria 2 auth; VLESS also exposes the Vision flow selector. It maps persisted `tcp`, `kcp`, and `ws` aliases to their current methods; Xray has removed legacy HTTP/2, QUIC, and standalone `xtls` security. REALITY is limited to RAW, XHTTP, and gRPC, while Vision is limited to VLESS over RAW with TLS or REALITY. `Other/v2ray-sn/build.ps1` stages the separately pinned legacy SagerNet executable for SSH and ShadowsocksR only. Its `LegacyV2rayConfigUtils` must remain limited to those two unsupported Xray outbounds; do not add modern transports or Xray features to it.
 
 Shutdown stops the server and mode controllers together, clears the status-port text, and finally clears all active controller references. Mode implementations must not create competing global lifecycle state.
 
@@ -231,7 +233,7 @@ Do not replace one of these binaries without reviewing compatibility, updating i
 To create a GitHub Release archive after a successful build:
 
 ```powershell
-$archive = Join-Path (Get-Location) 'build\Netch-2.0.0-win-x64.zip'
+$archive = Join-Path (Get-Location) 'build\Netch-2.0.1-win-x64.zip'
 $items = Get-ChildItem -LiteralPath .\build -Force | Where-Object { $_.FullName -ne $archive } | Select-Object -ExpandProperty FullName
 Compress-Archive -LiteralPath $items -DestinationPath $archive -CompressionLevel Optimal
 Get-FileHash -LiteralPath $archive -Algorithm SHA256

@@ -11,20 +11,10 @@ public class VMessServer : Server
     public override string MaskedData()
     {
         var maskedData = $"{EncryptMethod} + {TransferProtocol} + {PacketEncoding} + {FakeType}";
-        switch (TransferProtocol)
-        {
-            case "tcp":
-            case "ws":
-                maskedData += $" + {TLSSecureType}";
-                break;
-            case "quic":
-                maskedData += $" + {QUICSecure}";
-                break;
-            case "grpc":
-                break;
-            case "kcp":
-                break;
-        }
+        maskedData += $" + {TLSSecureType}";
+
+        if (TLSSecureType == "reality")
+            maskedData += $" + {RealityFingerprint}";
 
         return maskedData;
     }
@@ -100,6 +90,41 @@ public class VMessServer : Server
     public bool? UseMux { get; set; }
 
     public string? ServerName { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     TLS or REALITY client fingerprint.
+    /// </summary>
+    public string RealityFingerprint { get; set; } = "chrome";
+
+    /// <summary>
+    ///     REALITY server public key (called <c>password</c> by current Xray configuration).
+    /// </summary>
+    public string RealityPublicKey { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     REALITY short ID.
+    /// </summary>
+    public string RealityShortId { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     REALITY crawler path and query.
+    /// </summary>
+    public string RealitySpiderX { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Optional ML-DSA-65 public verification key for REALITY.
+    /// </summary>
+    public string RealityMldsa65Verify { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     XHTTP request mode.
+    /// </summary>
+    public string XHttpMode { get; set; } = "auto";
+
+    /// <summary>
+    ///     Hysteria 2 authentication value when used as an Xray transport.
+    /// </summary>
+    public string HysteriaAuth { get; set; } = string.Empty;
 }
 
 public class VMessGlobal
@@ -123,21 +148,27 @@ public class VMessGlobal
     public static readonly List<string> PacketEncodings = new()
     {
         "none",
-        "packet", // requires v2fly/v2ray-core v5.0.2+ or SagerNet/v2ray-core
-        "xudp" // requires XTLS/Xray-core or SagerNet/v2ray-core
+        "packet",
+        "xudp"
     };
 
     /// <summary>
-    ///     V2Ray transport protocols
+    ///     Xray transport methods. The legacy aliases remain so saved profiles
+    ///     can be opened and migrated by the config generator.
     /// </summary>
     public static readonly List<string> TransferProtocols = new()
     {
-        "tcp",
-        "kcp",
-        "ws",
-        "h2",
-        "quic",
-        "grpc"
+        "raw",
+        "xhttp",
+        "mkcp",
+        "grpc",
+        "websocket",
+        "httpupgrade",
+        "hysteria",
+
+        // Persisted legacy aliases are accepted by the generator where Xray
+        // provides an equivalent, but are intentionally not offered for new
+        // profiles.
     };
 
     /// <summary>
@@ -162,6 +193,7 @@ public class VMessGlobal
     public static readonly List<string> TLSSecure = new()
     {
         "none",
-        "tls"
+        "tls",
+        "reality"
     };
 }

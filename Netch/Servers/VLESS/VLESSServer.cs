@@ -10,6 +10,11 @@ public class VLESSServer : VMessServer
     public override string EncryptMethod { get; set; } = "none";
 
     /// <summary>
+    ///     XTLS flow control. Vision requires TLS or REALITY security.
+    /// </summary>
+    public string Flow { get; set; } = string.Empty;
+
+    /// <summary>
     ///     Transport protocol.
     /// </summary>
     public override string TransferProtocol { get; set; } = VLESSGlobal.TransferProtocols[0];
@@ -26,7 +31,14 @@ public class VLESSGlobal
     {
         "none",
         "tls",
-        "xtls"
+        "reality"
+    };
+
+    public static readonly List<string> Flows = new()
+    {
+        "",
+        "xtls-rprx-vision",
+        "xtls-rprx-vision-udp443"
     };
 
     public static List<string> FakeTypes => VMessGlobal.FakeTypes;

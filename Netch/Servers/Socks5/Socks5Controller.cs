@@ -2,7 +2,7 @@ using Netch.Models;
 
 namespace Netch.Servers;
 
-public class Socks5Controller : V2rayController
+public class Socks5Controller : XrayController
 {
     public override string Name { get; } = "Socks5";
 

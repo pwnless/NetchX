@@ -45,7 +45,7 @@ public class ShadowsocksRUtil : IServerUtil
 
     public IServerController GetController()
     {
-        return new ShadowsocksRController();
+        return new LegacyV2rayController();
     }
 
     /// <summary>

@@ -57,7 +57,7 @@ public static class MainController
                 // Start Server Controller to get a local socks5 server
                 Log.Debug("Server Information: {Data}", $"{server.Type} {server.MaskedData()}");
 
-                ServerController = new V2rayController();
+                ServerController = CreateServerController(server);
                 Global.MainForm.StatusText(i18N.TranslateFormat("Starting {0}", ServerController.Name));
 
                 TryReleaseTcpPort(ServerController.Socks5LocalPort(), "Socks5");
@@ -98,6 +98,22 @@ public static class MainController
     {
         using var _ = await Lock.EnterAsync();
         await StopCoreAsync();
+    }
+
+    /// <summary>
+    ///     Xray-core is the default runtime. The bundled legacy SagerNet
+    ///     binary exists solely for its SSH and ShadowsocksR outbounds.
+    /// </summary>
+    public static IServerController CreateServerController(Server server)
+    {
+        return UsesLegacyV2rayFallback(server)
+            ? new LegacyV2rayController()
+            : new XrayController();
+    }
+
+    public static bool UsesLegacyV2rayFallback(Server server)
+    {
+        return server is SSHServer or ShadowsocksRServer;
     }
 
     private static async Task StopCoreAsync()

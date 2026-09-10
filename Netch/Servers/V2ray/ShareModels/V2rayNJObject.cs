@@ -66,4 +66,29 @@ public class V2rayNJObject
     ///     serverName
     /// </summary>
     public string sni { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     TLS or REALITY client fingerprint.
+    /// </summary>
+    public string fp { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     REALITY public key.
+    /// </summary>
+    public string pbk { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     REALITY short ID.
+    /// </summary>
+    public string sid { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     REALITY crawler path.
+    /// </summary>
+    public string spx { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     XHTTP transport mode.
+    /// </summary>
+    public string mode { get; set; } = string.Empty;
 }

@@ -26,13 +26,22 @@ public static class V2rayUtils
             server.EncryptMethod = parameter.Get("encryption") ?? scheme switch { "vless" => "none", _ => "auto" };
             switch (server.TransferProtocol)
             {
+                case "raw":
                 case "tcp":
                     break;
+                case "xhttp":
+                case "splithttp":
+                    server.Path = Uri.UnescapeDataString(parameter.Get("path") ?? "/");
+                    server.Host = Uri.UnescapeDataString(parameter.Get("host") ?? "");
+                    server.XHttpMode = parameter.Get("mode") ?? "auto";
+                    break;
                 case "kcp":
+                case "mkcp":
                     server.FakeType = parameter.Get("headerType") ?? "none";
                     server.Path = Uri.UnescapeDataString(parameter.Get("seed") ?? "");
                     break;
                 case "ws":
+                case "websocket":
                     server.Path = Uri.UnescapeDataString(parameter.Get("path") ?? "/");
                     server.Host = Uri.UnescapeDataString(parameter.Get("host") ?? "");
                     break;
@@ -48,13 +57,28 @@ public static class V2rayUtils
                 case "grpc":
                     server.FakeType = parameter.Get("mode") ?? "gun";
                     server.Path = parameter.Get("serviceName") ?? "";
+                    server.Host = parameter.Get("authority") ?? "";
+                    break;
+                case "httpupgrade":
+                    server.Path = Uri.UnescapeDataString(parameter.Get("path") ?? "/");
+                    server.Host = Uri.UnescapeDataString(parameter.Get("host") ?? "");
+                    break;
+                case "hysteria":
+                    server.HysteriaAuth = parameter.Get("auth") ?? "";
                     break;
             }
 
             server.TLSSecureType = parameter.Get("security") ?? "none";
-            if (server.TLSSecureType != "none")
+            server.ServerName = parameter.Get("sni") ?? "";
+            server.RealityFingerprint = parameter.Get("fp") ?? "chrome";
+            server.RealityPublicKey = parameter.Get("pbk") ?? parameter.Get("password") ?? "";
+            server.RealityShortId = parameter.Get("sid") ?? "";
+            server.RealitySpiderX = parameter.Get("spx") ?? "";
+            server.RealityMldsa65Verify = parameter.Get("mldsa65Verify") ?? "";
+
+            if (server is VLESSServer vless)
             {
-                server.ServerName = parameter.Get("sni") ?? "";
+                vless.Flow = parameter.Get("flow") ?? string.Empty;
             }
         }
 
@@ -83,9 +107,21 @@ public static class V2rayUtils
         // transport-specific fields
         switch (server.TransferProtocol)
         {
+            case "raw":
             case "tcp":
                 break;
+            case "xhttp":
+            case "splithttp":
+                parameter.Add("path", Uri.EscapeDataString(server.Path.ValueOrDefault() ?? "/"));
+                if (!server.Host.IsNullOrWhiteSpace())
+                    parameter.Add("host", Uri.EscapeDataString(server.Host!));
+
+                if (!string.IsNullOrWhiteSpace(server.XHttpMode) && server.XHttpMode != "auto")
+                    parameter.Add("mode", server.XHttpMode);
+
+                break;
             case "kcp":
+            case "mkcp":
                 if (server.FakeType != "none")
                     parameter.Add("headerType", server.FakeType);
 
@@ -94,6 +130,7 @@ public static class V2rayUtils
 
                 break;
             case "ws":
+            case "websocket":
                 parameter.Add("path", Uri.EscapeDataString(server.Path.ValueOrDefault() ?? "/"));
                 if (!server.Host.IsNullOrWhiteSpace())
                     parameter.Add("host", Uri.EscapeDataString(server.Host!));
@@ -120,23 +157,57 @@ public static class V2rayUtils
                 if (!string.IsNullOrEmpty(server.Path))
                     parameter.Add("serviceName", server.Path);
 
+                if (!server.Host.IsNullOrWhiteSpace())
+                    parameter.Add("authority", Uri.EscapeDataString(server.Host!));
+
                 if (server.FakeType is "gun" or "multi")
                     parameter.Add("mode", server.FakeType);
+
+                break;
+            case "httpupgrade":
+                parameter.Add("path", Uri.EscapeDataString(server.Path.ValueOrDefault() ?? "/"));
+                if (!server.Host.IsNullOrWhiteSpace())
+                    parameter.Add("host", Uri.EscapeDataString(server.Host!));
+
+                break;
+            case "hysteria":
+                if (!string.IsNullOrWhiteSpace(server.HysteriaAuth))
+                    parameter.Add("auth", Uri.EscapeDataString(server.HysteriaAuth));
 
                 break;
         }
 
         if (server.TLSSecureType != "none")
         {
-            parameter.Add("security", server.TLSSecureType);
+            parameter.Add("security", server.TLSSecureType == "xtls" ? "tls" : server.TLSSecureType);
 
-            if (!server.Host.IsNullOrWhiteSpace())
-                parameter.Add("sni", server.Host!);
+            if (!server.ServerName.IsNullOrWhiteSpace())
+                parameter.Add("sni", Uri.EscapeDataString(server.ServerName!));
 
-            if (server.TLSSecureType == "xtls")
+            if (!string.IsNullOrWhiteSpace(server.RealityFingerprint))
+                parameter.Add("fp", server.RealityFingerprint);
+
+            if (server.TLSSecureType == "reality")
             {
-                parameter.Add("flow", "xtls-rprx-direct");
+                parameter.Add("pbk", Uri.EscapeDataString(server.RealityPublicKey));
+                if (!string.IsNullOrWhiteSpace(server.RealityShortId))
+                    parameter.Add("sid", Uri.EscapeDataString(server.RealityShortId));
+
+                if (!string.IsNullOrWhiteSpace(server.RealitySpiderX))
+                    parameter.Add("spx", Uri.EscapeDataString(server.RealitySpiderX));
+
+                if (!string.IsNullOrWhiteSpace(server.RealityMldsa65Verify))
+                    parameter.Add("mldsa65Verify", Uri.EscapeDataString(server.RealityMldsa65Verify));
             }
+        }
+
+        if (server is VLESSServer vless)
+        {
+            var flow = string.IsNullOrWhiteSpace(vless.Flow) && vless.TLSSecureType == "xtls"
+                ? "xtls-rprx-vision"
+                : vless.Flow;
+            if (!string.IsNullOrWhiteSpace(flow))
+                parameter.Add("flow", flow);
         }
 
         return

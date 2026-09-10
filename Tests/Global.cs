@@ -3,6 +3,7 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Netch.Controllers;
@@ -115,5 +116,179 @@ public class Global
         Assert.IsFalse(RouteUtils.TryParseIPNetwork("2001:db8::/32", out _, out _));
         Assert.IsFalse(RouteUtils.TryParseIPNetwork("10.0.0.0/33", out _, out _));
         Assert.IsFalse(RouteUtils.TryParseIPNetwork("not-an-address/24", out _, out _));
+    }
+
+    [TestMethod]
+    public async Task XrayRealityVisionConfigUsesModernTransportFieldsAsync()
+    {
+        var server = new VLESSServer
+        {
+            Hostname = "127.0.0.1",
+            Port = 443,
+            UserID = "b831381d-6324-4d53-ad4f-8cda48b30811",
+            TransferProtocol = "raw",
+            TLSSecureType = "reality",
+            ServerName = "www.example.com",
+            Host = "www.example.com",
+            Path = "/connect",
+            XHttpMode = "stream-one",
+            Flow = "xtls-rprx-vision",
+            RealityPublicKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            RealityShortId = "01234567",
+            RealitySpiderX = "/search?q=netch"
+        };
+
+        var config = await V2rayConfigUtils.GenerateClientConfigAsync(server);
+        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        using var document = JsonDocument.Parse(json);
+        var outbound = document.RootElement.GetProperty("outbounds")[0];
+        var streamSettings = outbound.GetProperty("streamSettings");
+        var realitySettings = streamSettings.GetProperty("realitySettings");
+
+        Assert.AreEqual("raw", streamSettings.GetProperty("method").GetString());
+        Assert.AreEqual("reality", streamSettings.GetProperty("security").GetString());
+        Assert.IsFalse(streamSettings.TryGetProperty("network", out _));
+        Assert.IsTrue(streamSettings.TryGetProperty("rawSettings", out _));
+        Assert.AreEqual(server.RealityPublicKey, realitySettings.GetProperty("password").GetString());
+        Assert.AreEqual(server.RealityShortId, realitySettings.GetProperty("shortId").GetString());
+        Assert.AreEqual(server.Flow, outbound.GetProperty("settings").GetProperty("vnext")[0].GetProperty("users")[0].GetProperty("flow").GetString());
+        Assert.IsFalse(outbound.GetProperty("mux").GetProperty("enabled").GetBoolean());
+    }
+
+    [TestMethod]
+    public void VlessRealityLinkRoundTripsModernTransportFields()
+    {
+        var source = new VLESSServer
+        {
+            Hostname = "edge.example.com",
+            Port = 443,
+            UserID = "b831381d-6324-4d53-ad4f-8cda48b30811",
+            TransferProtocol = "xhttp",
+            TLSSecureType = "reality",
+            ServerName = "www.example.com",
+            Host = "www.example.com",
+            Path = "/connect",
+            XHttpMode = "stream-up",
+            Flow = "xtls-rprx-vision",
+            RealityPublicKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            RealityShortId = "01234567",
+            RealityFingerprint = "firefox",
+            RealitySpiderX = "/search?q=netch",
+            RealityMldsa65Verify = "verify-key"
+        };
+
+        var link = V2rayUtils.GetVShareLink(source, "vless");
+        var parsedServer = V2rayUtils.ParseVUri(link).Single();
+        Assert.IsInstanceOfType<VLESSServer>(parsedServer);
+        var parsed = (VLESSServer)parsedServer;
+
+        Assert.AreEqual(source.TransferProtocol, parsed.TransferProtocol);
+        Assert.AreEqual(source.TLSSecureType, parsed.TLSSecureType);
+        Assert.AreEqual(source.ServerName, parsed.ServerName);
+        Assert.AreEqual(source.XHttpMode, parsed.XHttpMode);
+        Assert.AreEqual(source.Flow, parsed.Flow);
+        Assert.AreEqual(source.RealityPublicKey, parsed.RealityPublicKey);
+        Assert.AreEqual(source.RealityShortId, parsed.RealityShortId);
+        Assert.AreEqual(source.RealityFingerprint, parsed.RealityFingerprint);
+        Assert.AreEqual(source.RealitySpiderX, parsed.RealitySpiderX);
+        Assert.AreEqual(source.RealityMldsa65Verify, parsed.RealityMldsa65Verify);
+    }
+
+    [TestMethod]
+    public async Task XrayXhttpConfigUsesTheConfiguredModeAsync()
+    {
+        var server = new VLESSServer
+        {
+            Hostname = "127.0.0.1",
+            Port = 443,
+            UserID = "b831381d-6324-4d53-ad4f-8cda48b30811",
+            TransferProtocol = "xhttp",
+            TLSSecureType = "tls",
+            ServerName = "www.example.com",
+            Host = "www.example.com",
+            Path = "/connect",
+            XHttpMode = "stream-one"
+        };
+
+        var config = await V2rayConfigUtils.GenerateClientConfigAsync(server);
+        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        using var document = JsonDocument.Parse(json);
+        var streamSettings = document.RootElement.GetProperty("outbounds")[0].GetProperty("streamSettings");
+
+        Assert.AreEqual("xhttp", streamSettings.GetProperty("method").GetString());
+        Assert.AreEqual("tls", streamSettings.GetProperty("security").GetString());
+        Assert.AreEqual("stream-one", streamSettings.GetProperty("xhttpSettings").GetProperty("mode").GetString());
+    }
+
+    [TestMethod]
+    public void OnlySshAndShadowsocksRUseTheLegacyRuntime()
+    {
+        Assert.IsTrue(MainController.UsesLegacyV2rayFallback(new SSHServer()));
+        Assert.IsTrue(MainController.UsesLegacyV2rayFallback(new ShadowsocksRServer()));
+        Assert.IsFalse(MainController.UsesLegacyV2rayFallback(new VLESSServer()));
+        Assert.IsFalse(MainController.UsesLegacyV2rayFallback(new VMessServer()));
+        Assert.IsFalse(MainController.UsesLegacyV2rayFallback(new ShadowsocksServer()));
+    }
+
+    [TestMethod]
+    public async Task LegacySagerNetConfigContainsTheShadowsocksRPluginAsync()
+    {
+        var server = new ShadowsocksRServer
+        {
+            Hostname = "127.0.0.1",
+            Port = 8388,
+            EncryptMethod = "aes-256-cfb",
+            Password = "password",
+            Protocol = "auth_aes128_sha1",
+            ProtocolParam = "user-id:password",
+            OBFS = "tls1.2_ticket_auth",
+            OBFSParam = "example.com"
+        };
+
+        var config = await LegacyV2rayConfigUtils.GenerateClientConfigAsync(server);
+        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        using var document = JsonDocument.Parse(json);
+        var outbound = document.RootElement.GetProperty("outbounds")[0];
+        var settings = outbound.GetProperty("settings");
+
+        Assert.AreEqual("shadowsocks", outbound.GetProperty("protocol").GetString());
+        Assert.AreEqual("shadowsocksr", settings.GetProperty("plugin").GetString());
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "--obfs=tls1.2_ticket_auth",
+                "--obfs-param=example.com",
+                "--protocol=auth_aes128_sha1",
+                "--protocol-param=user-id:password"
+            },
+            settings.GetProperty("pluginArgs").EnumerateArray().Select(argument => argument.GetString()).ToArray());
+    }
+
+    [TestMethod]
+    public async Task LegacySagerNetConfigContainsTheSshOutboundAsync()
+    {
+        var server = new SSHServer
+        {
+            Hostname = "127.0.0.1",
+            Port = 22,
+            User = "netch",
+            Password = "password",
+            PrivateKey = "private-key",
+            PublicKey = "host-public-key"
+        };
+
+        var config = await LegacyV2rayConfigUtils.GenerateClientConfigAsync(server);
+        var json = JsonSerializer.Serialize(config, Netch.Global.NewCustomJsonSerializerOptions());
+        using var document = JsonDocument.Parse(json);
+        var outbound = document.RootElement.GetProperty("outbounds")[0];
+        var settings = outbound.GetProperty("settings");
+
+        Assert.AreEqual("ssh", outbound.GetProperty("protocol").GetString());
+        Assert.AreEqual("127.0.0.1", settings.GetProperty("address").GetString());
+        Assert.AreEqual(22, settings.GetProperty("port").GetInt32());
+        Assert.AreEqual("netch", settings.GetProperty("user").GetString());
+        Assert.AreEqual("password", settings.GetProperty("password").GetString());
+        Assert.AreEqual("private-key", settings.GetProperty("privateKey").GetString());
+        Assert.AreEqual("host-public-key", settings.GetProperty("publicKey").GetString());
     }
 }

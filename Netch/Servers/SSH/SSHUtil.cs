@@ -38,7 +38,7 @@ public class SSHUtil : IServerUtil
 
     public IServerController GetController()
     {
-        return new V2rayController();
+        return new LegacyV2rayController();
     }
 
     public IEnumerable<Server> ParseUri(string text)

@@ -8,13 +8,24 @@ if (Test-Path -LiteralPath $goBin) {
 }
 
 $fallback = 'D:\Netch\bin\v2ray-sn.exe'
-if ($Env:NETCH_BUILD_V2RAY_FROM_SOURCE -ne '1') {
-    if (-not (Test-Path -LiteralPath $fallback)) {
+$expectedFallbackHash = 'a219f435671fb214c0c530084c65e576fdc1404f40b187b5586e869d2a3e4dff'
+
+function Stage-LegacyFallback {
+    if (-not (Test-Path -LiteralPath $fallback -PathType Leaf)) {
         throw "v2ray-sn fallback binary is missing: $fallback"
     }
 
-    Write-Warning 'Staging the local v2ray-sn fallback. Set NETCH_BUILD_V2RAY_FROM_SOURCE=1 to rebuild its legacy fork from source.'
+    $actualHash = (Get-FileHash -LiteralPath $fallback -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $expectedFallbackHash) {
+        throw "v2ray-sn fallback binary did not match the pinned SHA-256: $fallback"
+    }
+
     Copy-Item -LiteralPath $fallback -Destination '..\release\v2ray-sn.exe' -Force
+}
+
+if ($Env:NETCH_BUILD_V2RAY_FROM_SOURCE -ne '1') {
+    Write-Warning 'Staging the local v2ray-sn fallback. Set NETCH_BUILD_V2RAY_FROM_SOURCE=1 to rebuild its legacy fork from source.'
+    Stage-LegacyFallback
     exit 0
 }
 
@@ -48,12 +59,8 @@ try {
     }
 }
 catch {
-    if (-not (Test-Path -LiteralPath $fallback)) {
-        throw
-    }
-
     Write-Warning "v2ray-sn source build failed ($($_.Exception.Message)); staging the local fallback binary."
-    Copy-Item -LiteralPath $fallback -Destination '..\release\v2ray-sn.exe' -Force
+    Stage-LegacyFallback
 }
 finally {
     Set-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)

@@ -96,7 +96,10 @@ jobs:
             'bin\aiodns.bin',
             'bin\pcap2socks.exe',
             'bin\tun2socks.exe',
+            'bin\xray.exe',
             'bin\v2ray-sn.exe',
+            'bin\geoip.dat',
+            'bin\geosite.dat',
             'bin\wintun.dll',
             'bin\GeoLite2-Country.mmdb'
           )

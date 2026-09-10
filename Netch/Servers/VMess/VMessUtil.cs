@@ -51,7 +51,12 @@ public class VMessUtil : IServerUtil
                     host = server.Host ?? "",
                     path = server.Path ?? "",
                     tls = server.TLSSecureType,
-                    sni = server.ServerName ?? ""
+                    sni = server.ServerName ?? "",
+                    fp = server.RealityFingerprint,
+                    pbk = server.RealityPublicKey,
+                    sid = server.RealityShortId,
+                    spx = server.RealitySpiderX,
+                    mode = server.XHttpMode
                 },
                 new JsonSerializerOptions
                 {
@@ -66,7 +71,7 @@ public class VMessUtil : IServerUtil
 
     public IServerController GetController()
     {
-        return new V2rayController();
+        return new XrayController();
     }
 
     public IEnumerable<Server> ParseUri(string text)
@@ -95,6 +100,11 @@ public class VMessUtil : IServerUtil
         data.TransferProtocol = vmess.net;
         data.FakeType = vmess.type;
         data.ServerName = vmess.sni;
+        data.RealityFingerprint = string.IsNullOrWhiteSpace(vmess.fp) ? "chrome" : vmess.fp;
+        data.RealityPublicKey = vmess.pbk;
+        data.RealityShortId = vmess.sid;
+        data.RealitySpiderX = vmess.spx;
+        data.XHttpMode = string.IsNullOrWhiteSpace(vmess.mode) ? "auto" : vmess.mode;
 
         if (data.TransferProtocol == "quic")
         {

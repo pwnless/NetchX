@@ -56,11 +56,11 @@ New-Item -ItemType Directory -Path $outputFullPath | Out-Null
 
 Push-Location $outputFullPath
 New-Item -ItemType Directory -Name 'bin'  | Out-Null
-cp -Recurse -Force '..\Storage\i18n' '.'  | Out-Null
-cp -Recurse -Force '..\Storage\mode' '.'  | Out-Null
-cp -Recurse -Force '..\Storage\stun.txt' 'bin'  | Out-Null
-cp -Recurse -Force '..\Storage\nfdriver.sys' 'bin'  | Out-Null
-cp -Recurse -Force '..\Storage\aiodns.conf' 'bin'  | Out-Null
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'Storage\i18n') -Destination '.' -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'Storage\mode') -Destination '.' -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'Storage\stun.txt') -Destination 'bin' -Force
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'Storage\nfdriver.sys') -Destination 'bin' -Force
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'Storage\aiodns.conf') -Destination 'bin' -Force
 $localCountryDatabase = Join-Path $repositoryRoot 'Country.mmdb'
 if (Test-Path -LiteralPath $localCountryDatabase) {
     Copy-Item -LiteralPath $localCountryDatabase -Destination 'bin\GeoLite2-Country.mmdb' -Force
@@ -81,7 +81,7 @@ else {
     }
 }
 #cp -Recurse -Force '..\Storage\GeoLite2-Country.mmdb' 'bin'  | Out-Null
-cp -Recurse -Force '..\Storage\README.md' 'bin'  | Out-Null
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'Storage\README.md') -Destination 'bin' -Force
 Pop-Location
 
 & .\Other\build.ps1
@@ -91,6 +91,7 @@ if ( -Not $? ) {
 cp -Force '.\Other\release\*.bin' "$OutputPath\bin"
 cp -Force '.\Other\release\*.dll' "$OutputPath\bin"
 cp -Force '.\Other\release\*.exe' "$OutputPath\bin"
+cp -Force '.\Other\release\*.dat' "$OutputPath\bin"
 
 Write-Host
 Write-Host 'Building Netch'
@@ -141,7 +142,10 @@ $requiredFiles = @(
     'bin\aiodns.conf',
     'bin\pcap2socks.exe',
     'bin\tun2socks.exe',
+    'bin\xray.exe',
     'bin\v2ray-sn.exe',
+    'bin\geoip.dat',
+    'bin\geosite.dat',
     'bin\wintun.dll',
     'bin\GeoLite2-Country.mmdb'
 )

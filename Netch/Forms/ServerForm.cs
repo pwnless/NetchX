@@ -118,6 +118,9 @@ public abstract class ServerForm : Form
     protected void CreateComboBox(string name, string remark, List<string> values, Action<string> save, string value, int width = InputBoxWidth)
     {
         _controlLines++;
+        var options = values.ToList();
+        if (!options.Contains(value))
+            options.Insert(0, value);
 
         var comboBox = new ComboBox
         {
@@ -129,8 +132,8 @@ public abstract class ServerForm : Form
             FormattingEnabled = true
         };
 
-        comboBox.Items.AddRange(values.ToArray());
-        comboBox.SelectedIndex = values.IndexOf(value);
+        comboBox.Items.AddRange(options.ToArray());
+        comboBox.SelectedIndex = options.IndexOf(value);
         comboBox.DrawItem += Utils.Utils.DrawCenterComboBox;
         _saveActions.Add(comboBox, o => save.Invoke((string)o));
         ConfigurationGroupBox.Controls.AddRange(new Control[]

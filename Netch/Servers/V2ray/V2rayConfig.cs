@@ -29,9 +29,9 @@ public class Outbound
 
     public OutboundConfiguration settings { get; set; }
 
-    public StreamSettings? streamSettings { get; set; }
+    public StreamSettings streamSettings { get; set; }
 
-    public Mux? mux { get; set; }
+    public Mux mux { get; set; }
 }
 
 public class OutboundConfiguration
@@ -104,25 +104,27 @@ public class Mux
 
 public class StreamSettings
 {
-    public string network { get; set; }
+    public string method { get; set; }
 
     public string security { get; set; }
 
     public TlsSettings tlsSettings { get; set; }
 
-    public TcpSettings tcpSettings { get; set; }
+    public RealitySettings realitySettings { get; set; }
+
+    public TcpSettings rawSettings { get; set; }
 
     public KcpSettings kcpSettings { get; set; }
 
     public WsSettings wsSettings { get; set; }
 
-    public HttpSettings httpSettings { get; set; }
-
-    public QuicSettings quicSettings { get; set; }
-
-    public TlsSettings xtlsSettings { get; set; }
-
     public GrpcSettings grpcSettings { get; set; }
+
+    public XHttpSettings xhttpSettings { get; set; }
+
+    public HttpUpgradeSettings httpupgradeSettings { get; set; }
+
+    public HysteriaSettings hysteriaSettings { get; set; }
 
     public Sockopt sockopt { get; set; }
 }
@@ -134,6 +136,23 @@ public class TlsSettings
     public bool allowInsecure { get; set; }
 
     public string serverName { get; set; }
+
+    public string fingerprint { get; set; }
+}
+
+public class RealitySettings
+{
+    public string serverName { get; set; }
+
+    public string fingerprint { get; set; }
+
+    public string password { get; set; }
+
+    public string shortId { get; set; }
+
+    public string mldsa65Verify { get; set; }
+
+    public string spiderX { get; set; }
 }
 
 public class TcpSettings
@@ -169,27 +188,36 @@ public class KcpSettings
     public string seed { get; set; }
 }
 
-public class HttpSettings
-{
-    public string path { get; set; }
-
-    public string[] host { get; set; }
-}
-
-public class QuicSettings
-{
-    public string security { get; set; }
-
-    public string key { get; set; }
-
-    public object header { get; set; }
-}
-
 public class GrpcSettings
 {
+    public string authority { get; set; }
+
     public string serviceName { get; set; }
 
     public bool multiMode { get; set; }
+}
+
+public class XHttpSettings
+{
+    public string host { get; set; }
+
+    public string path { get; set; }
+
+    public string mode { get; set; }
+}
+
+public class HttpUpgradeSettings
+{
+    public string host { get; set; }
+
+    public string path { get; set; }
+}
+
+public class HysteriaSettings
+{
+    public int version { get; set; } = 2;
+
+    public string auth { get; set; }
 }
 
 public class Sockopt
