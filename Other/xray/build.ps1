@@ -15,18 +15,35 @@ try {
         'geosite.dat' = 'adf92de0cfc70e458b399f04c5f912bf42d115ed7e37281b30e2f1c68605e4e9'
     }
 
-    # Use an explicitly supplied release directory first, then the sibling
-    # checkout. CI has neither, so download this exact audited release.
+    # Prefer an explicitly supplied release, then an audited local cache kept
+    # beside this script, then a sibling checkout. CI has neither local source,
+    # so it downloads this exact pinned release.
     $downloadDirectory = $null
+    function Test-XrayReleaseDirectory([string]$candidatePath) {
+        if ([string]::IsNullOrWhiteSpace($candidatePath) -or -not (Test-Path -LiteralPath $candidatePath -PathType Container)) {
+            return $false
+        }
+        foreach ($file in @('xray.exe', 'geoip.dat', 'geosite.dat')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $candidatePath $file) -PathType Leaf)) {
+                return $false
+            }
+        }
+        return $true
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($Env:NETCHX_XRAY_RELEASE)) {
         $releasePath = [IO.Path]::GetFullPath($Env:NETCHX_XRAY_RELEASE)
         if (-not (Test-Path -LiteralPath $releasePath -PathType Container)) {
             throw "NETCHX_XRAY_RELEASE does not exist: $releasePath"
         }
     }
+    elseif (Test-XrayReleaseDirectory $PSScriptRoot) {
+        $releasePath = [IO.Path]::GetFullPath($PSScriptRoot)
+        Write-Host "Using locally cached Xray $xrayVersion"
+    }
     else {
         $siblingReleasePath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\xray-core\release'))
-        if (Test-Path -LiteralPath $siblingReleasePath -PathType Container) {
+        if (Test-XrayReleaseDirectory $siblingReleasePath) {
             $releasePath = $siblingReleasePath
         }
         else {

@@ -24,3 +24,6 @@
 /Redirector/Tests/*.exe
 /Redirector/Tests/*.exp
 /Redirector/Tests/*.lib
+/Other/xray/xray.exe
+/Other/xray/geoip.dat
+/Other/xray/geosite.dat
