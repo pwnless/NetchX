@@ -17,6 +17,8 @@ extern string tgtPassword;
 
 namespace
 {
+	constexpr int MaxSocksUdpDatagramBytes = 65507;
+
 	bool SendAll(SOCKET socket, const char* buffer, int length)
 	{
 		for (int sent = 0; sent < length;)
@@ -43,6 +45,94 @@ namespace
 		}
 
 		return true;
+	}
+
+	bool ResolveSocksDomain(const string& hostname, USHORT port, PSOCKADDR_IN6 address)
+	{
+		addrinfo hints{};
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_socktype = SOCK_DGRAM;
+		hints.ai_protocol = IPPROTO_UDP;
+
+		addrinfo* results = NULL;
+		if (getaddrinfo(hostname.c_str(), NULL, &hints, &results) != 0)
+			return false;
+
+		bool resolved = false;
+		for (auto current = results; current != NULL; current = current->ai_next)
+		{
+			if (current->ai_family == AF_INET && current->ai_addrlen >= sizeof(SOCKADDR_IN))
+			{
+				memset(address, 0, sizeof(SOCKADDR_IN6));
+				memcpy(address, current->ai_addr, sizeof(SOCKADDR_IN));
+				reinterpret_cast<PSOCKADDR_IN>(address)->sin_port = port;
+				resolved = true;
+				break;
+			}
+			if (current->ai_family == AF_INET6 && current->ai_addrlen >= sizeof(SOCKADDR_IN6))
+			{
+				memset(address, 0, sizeof(SOCKADDR_IN6));
+				memcpy(address, current->ai_addr, sizeof(SOCKADDR_IN6));
+				address->sin6_port = port;
+				resolved = true;
+				break;
+			}
+		}
+
+		freeaddrinfo(results);
+		return resolved;
+	}
+
+	bool IsUnspecifiedAddress(PSOCKADDR_IN6 address)
+	{
+		if (address->sin6_family == AF_INET)
+			return reinterpret_cast<PSOCKADDR_IN>(address)->sin_addr.s_addr == INADDR_ANY;
+		if (address->sin6_family == AF_INET6)
+			return IN6_IS_ADDR_UNSPECIFIED(&address->sin6_addr);
+		return false;
+	}
+
+	bool ReplaceUnspecifiedRelayAddress(SOCKET socket, PSOCKADDR_IN6 relay)
+	{
+		if (!IsUnspecifiedAddress(relay))
+			return true;
+
+		const USHORT relayPort = relay->sin6_family == AF_INET
+			? reinterpret_cast<PSOCKADDR_IN>(relay)->sin_port
+			: relay->sin6_port;
+		if (relayPort == 0)
+			return false;
+
+		SOCKADDR_STORAGE peer{};
+		int peerLength = sizeof(peer);
+		if (getpeername(socket, reinterpret_cast<PSOCKADDR>(&peer), &peerLength) == SOCKET_ERROR)
+			return false;
+
+		memset(relay, 0, sizeof(SOCKADDR_IN6));
+		if (peer.ss_family == AF_INET && peerLength >= sizeof(SOCKADDR_IN))
+		{
+			memcpy(relay, &peer, sizeof(SOCKADDR_IN));
+			reinterpret_cast<PSOCKADDR_IN>(relay)->sin_port = relayPort;
+			return true;
+		}
+		if (peer.ss_family == AF_INET6 && peerLength >= sizeof(SOCKADDR_IN6))
+		{
+			const auto peerIpv6 = reinterpret_cast<const SOCKADDR_IN6*>(&peer);
+			if (IN6_IS_ADDR_V4MAPPED(&peerIpv6->sin6_addr))
+			{
+				SOCKADDR_IN ipv4{};
+				ipv4.sin_family = AF_INET;
+				ipv4.sin_port = relayPort;
+				memcpy(&ipv4.sin_addr, reinterpret_cast<const unsigned char*>(&peerIpv6->sin6_addr) + 12, sizeof(ipv4.sin_addr));
+				memcpy(relay, &ipv4, sizeof(ipv4));
+				return true;
+			}
+			memcpy(relay, &peer, sizeof(SOCKADDR_IN6));
+			relay->sin6_port = relayPort;
+			return true;
+		}
+
+		return false;
 	}
 }
 
@@ -197,12 +287,14 @@ bool SocksHelper::Handshake(SOCKET client)
 
 bool SocksHelper::SplitAddr(SOCKET client, PSOCKADDR_IN6 addr)
 {
-	char addrType;
-	if (!ReceiveExact(client, (char*)&addrType, 1))
+	unsigned char addrType = 0;
+	if (!ReceiveExact(client, reinterpret_cast<char*>(&addrType), 1))
 	{
 		printf("[Redirector][SocksHelper::SplitAddr] Read address type failed: %d\n", WSAGetLastError());
 		return false;
 	}
+
+	memset(addr, 0, sizeof(SOCKADDR_IN6));
 
 	if (addrType == 0x01)
 	{
@@ -234,6 +326,29 @@ bool SocksHelper::SplitAddr(SOCKET client, PSOCKADDR_IN6 addr)
 		if (!ReceiveExact(client, (char*)&addr->sin6_port, 2))
 		{
 			printf("[Redirector][SocksHelper::SplitAddr] Read IPv6 port failed: %d\n", WSAGetLastError());
+			return false;
+		}
+	}
+	else if (addrType == 0x03)
+	{
+		unsigned char hostnameLength = 0;
+		if (!ReceiveExact(client, reinterpret_cast<char*>(&hostnameLength), 1) || hostnameLength == 0)
+		{
+			printf("[Redirector][SocksHelper::SplitAddr] Read domain length failed: %d\n", WSAGetLastError());
+			return false;
+		}
+
+		string hostname(hostnameLength, '\0');
+		USHORT port = 0;
+		if (!ReceiveExact(client, hostname.data(), hostnameLength) || !ReceiveExact(client, reinterpret_cast<char*>(&port), sizeof(port)))
+		{
+			printf("[Redirector][SocksHelper::SplitAddr] Read domain address failed: %d\n", WSAGetLastError());
+			return false;
+		}
+
+		if (!ResolveSocksDomain(hostname, port, addr))
+		{
+			printf("[Redirector][SocksHelper::SplitAddr] Resolve domain address failed: %d\n", WSAGetLastError());
 			return false;
 		}
 	}
@@ -373,6 +488,7 @@ void SocksHelper::UDP::CloseSockets()
 
 void SocksHelper::UDP::Stop()
 {
+	lock_guard<mutex> stopGuard(stopLock);
 	stopping = true;
 	SOCKET tcp = INVALID_SOCKET;
 	SOCKET udp = INVALID_SOCKET;
@@ -441,7 +557,22 @@ bool SocksHelper::UDP::AssociateLocked()
 		return false;
 	}
 
-	return SocksHelper::SplitAddr(tcpSocket, &address);
+	if (!SocksHelper::SplitAddr(tcpSocket, &address) || !ReplaceUnspecifiedRelayAddress(tcpSocket, &address))
+		return false;
+
+	// Connect(), Handshake(), and the association response need finite timeouts.
+	// The established UDP ASSOCIATE control channel must remain idle, however;
+	// retaining SO_RCVTIMEO here would tear down a healthy association after five
+	// seconds without control traffic.
+	DWORD noTimeout = 0;
+	if (setsockopt(tcpSocket, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&noTimeout), sizeof(noTimeout)) == SOCKET_ERROR ||
+		setsockopt(tcpSocket, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&noTimeout), sizeof(noTimeout)) == SOCKET_ERROR)
+	{
+		printf("[Redirector][SocksHelper::UDP::Associate] Clear control socket timeout failed: %d\n", WSAGetLastError());
+		return false;
+	}
+
+	return true;
 }
 
 bool SocksHelper::UDP::CreateUDPLocked()
@@ -537,6 +668,11 @@ void SocksHelper::UDP::ResetReceiver()
 	receiverStarted = false;
 }
 
+bool SocksHelper::UDP::IsStopped() const
+{
+	return stopping;
+}
+
 void SocksHelper::UDP::Run()
 {
 	SOCKET socket;
@@ -545,10 +681,13 @@ void SocksHelper::UDP::Run()
 		socket = tcpSocket;
 	}
 
-	char buffer[1];
+	char buffer[256];
 	while (!stopping && socket != INVALID_SOCKET)
 	{
-		if (!ReceiveExact(socket, buffer, sizeof(buffer)) || !SendAll(socket, buffer, sizeof(buffer)))
+		// SOCKS5 UDP ASSOCIATE keeps this TCP connection open as the association
+		// lifetime. It is not an echo protocol: wait for closure and discard any
+		// unexpected control bytes instead of manufacturing a response.
+		if (recv(socket, buffer, sizeof(buffer), 0) <= 0)
 			break;
 	}
 
@@ -578,6 +717,12 @@ int SocksHelper::UDP::Send(PSOCKADDR_IN6 target, const char* buffer, int length)
 		return SOCKET_ERROR;
 
 	const auto headerLength = 3 + 1 + (target->sin6_family == AF_INET ? 4 : 16) + 2;
+	if (length > MaxSocksUdpDatagramBytes - headerLength)
+	{
+		WSASetLastError(WSAEMSGSIZE);
+		return SOCKET_ERROR;
+	}
+
 	thread_local vector<char> data;
 	data.resize(headerLength + static_cast<size_t>(length));
 	data[0] = 0x00;

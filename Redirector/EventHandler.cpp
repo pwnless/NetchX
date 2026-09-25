@@ -33,6 +33,7 @@ namespace
 	constexpr size_t MaxPendingUdpPackets = 4096;
 	constexpr size_t MaxPendingUdpBytes = 16 * 1024 * 1024;
 	constexpr size_t MaxUdpPacketBytes = 65507;
+	constexpr size_t MaxUdpReceivePacketBytes = 65535;
 	constexpr size_t MaxUdpOptionBytes = 4096;
 	constexpr size_t UdpOptionsHeaderLength = offsetof(NF_UDP_OPTIONS, options);
 	constexpr size_t MaxUdpReceiveWorkers = 16;
@@ -69,8 +70,8 @@ namespace
 
 	struct UdpReceiveOperation
 	{
-		explicit UdpReceiveOperation(shared_ptr<UdpContext> value, const vector<char>& valueOptions)
-			: context(move(value)), options(valueOptions), buffer(MaxUdpPacketBytes)
+		explicit UdpReceiveOperation(shared_ptr<UdpContext> value, shared_ptr<SocksHelper::UDP> valueRemote, const vector<char>& valueOptions)
+			: context(move(value)), remote(move(valueRemote)), options(valueOptions), buffer(MaxUdpReceivePacketBytes)
 		{
 			wsabuf.buf = buffer.data();
 			wsabuf.len = static_cast<ULONG>(buffer.size());
@@ -79,6 +80,7 @@ namespace
 		OVERLAPPED overlapped{};
 		WSABUF wsabuf{};
 		shared_ptr<UdpContext> context;
+		shared_ptr<SocksHelper::UDP> remote;
 		vector<char> options;
 		vector<char> buffer;
 	};
@@ -144,7 +146,7 @@ namespace
 		udpDispatchReady.notify_one();
 	}
 
-	bool StartUdpReceiver(const shared_ptr<UdpContext>& context, const vector<char>& options);
+	bool StartUdpReceiver(const shared_ptr<UdpContext>& context, const shared_ptr<SocksHelper::UDP>& remote, const vector<char>& options);
 	bool StartUdpReceiveWorkers();
 	void StopUdpReceiveWorkers();
 
@@ -168,6 +170,11 @@ namespace
 		return false;
 	}
 
+	size_t GetSocksUdpHeaderLength(const SOCKADDR_IN6& target)
+	{
+		return target.sin6_family == AF_INET ? 10 : 22;
+	}
+
 	void ProcessUdpContext(const shared_ptr<UdpContext>& context)
 	{
 		vector<unique_ptr<UdpPacket>> packets;
@@ -189,7 +196,43 @@ namespace
 			}
 		}
 
-		const bool ready = context->remote->EnsureReady();
+		shared_ptr<SocksHelper::UDP> remote;
+		{
+			lock_guard<mutex> lock(context->lock);
+			remote = context->remote;
+		}
+
+		bool ready = remote->EnsureReady();
+		// A SOCKS server may legitimately close the UDP ASSOCIATE control
+		// connection. Retire that association, cancel its receive, and retry the
+		// current packet batch through a new control/UDP pair. Receive operations
+		// retain their own remote object so a late completion cannot alter the
+		// replacement association's receiver state.
+		if (!ready && remote->IsStopped())
+		{
+			remote->Stop();
+			try
+			{
+				auto replacement = make_shared<SocksHelper::UDP>();
+				bool replaced = false;
+				{
+					lock_guard<mutex> lock(context->lock);
+					if (!context->closed && context->remote == remote)
+					{
+						context->remote = replacement;
+						remote = move(replacement);
+						replaced = true;
+					}
+				}
+				if (replaced)
+					ready = remote->EnsureReady();
+			}
+			catch (...)
+			{
+				ready = false;
+			}
+		}
+
 		{
 			lock_guard<mutex> lock(context->lock);
 			if (context->closed)
@@ -209,10 +252,10 @@ namespace
 		{
 			if (ready)
 			{
-				if (!receiverStarted && context->remote->TryStartReceiver())
-					receiverStarted = StartUdpReceiver(context, packet->options);
+				if (!receiverStarted && remote->TryStartReceiver())
+					receiverStarted = StartUdpReceiver(context, remote, packet->options);
 
-				if (context->remote->Send(&packet->target, packet->payload.data(), static_cast<int>(packet->payload.size())) == static_cast<int>(packet->payload.size()))
+				if (remote->Send(&packet->target, packet->payload.data(), static_cast<int>(packet->payload.size())) == static_cast<int>(packet->payload.size()))
 					UP += packet->payload.size();
 			}
 			ReleaseUdpQueueBudget(*packet);
@@ -307,7 +350,7 @@ namespace
 			if (it != udpReceiveOperations.end() && it->second == operation)
 				udpReceiveOperations.erase(it);
 		}
-		operation->context->remote->ResetReceiver();
+		operation->remote->ResetReceiver();
 		udpReceiveDrained.notify_all();
 	}
 
@@ -324,7 +367,7 @@ namespace
 		ZeroMemory(&operation->overlapped, sizeof(operation->overlapped));
 		operation->wsabuf.buf = operation->buffer.data();
 		operation->wsabuf.len = static_cast<ULONG>(operation->buffer.size());
-		return operation->context->remote->BeginReceive(&operation->wsabuf, &operation->overlapped);
+		return operation->remote->BeginReceive(&operation->wsabuf, &operation->overlapped);
 	}
 
 	void ProcessUdpReceiveCompletion(const shared_ptr<UdpReceiveOperation>& operation, bool completed, DWORD transferred)
@@ -625,22 +668,22 @@ void threadEnd()
 
 namespace
 {
-	bool StartUdpReceiver(const shared_ptr<UdpContext>& context, const vector<char>& options)
+	bool StartUdpReceiver(const shared_ptr<UdpContext>& context, const shared_ptr<SocksHelper::UDP>& remote, const vector<char>& options)
 	{
 		try
 		{
-			if (eventStopping || udpReceiveStopping || !context->remote->AssociateReceivePort(udpReceivePort))
+			if (eventStopping || udpReceiveStopping || !remote->AssociateReceivePort(udpReceivePort))
 			{
-				context->remote->ResetReceiver();
+				remote->ResetReceiver();
 				return false;
 			}
 
-			auto operation = make_shared<UdpReceiveOperation>(context, options);
+			auto operation = make_shared<UdpReceiveOperation>(context, remote, options);
 			{
 				lock_guard<mutex> lock(udpReceiveLock);
 				if (udpReceiveStopping)
 				{
-					context->remote->ResetReceiver();
+					remote->ResetReceiver();
 					return false;
 				}
 				udpReceiveOperations.emplace(&operation->overlapped, operation);
@@ -653,7 +696,7 @@ namespace
 		}
 		catch (...)
 		{
-			context->remote->ResetReceiver();
+			remote->ResetReceiver();
 			return false;
 		}
 	}
@@ -853,6 +896,9 @@ void udpSend(ENDPOINT_ID id, const unsigned char* target, const char* buffer, in
 		return;
 	if (target == NULL || buffer == NULL || options == NULL || length < 0)
 		return;
+	if (static_cast<size_t>(length) > MaxUdpPacketBytes || options->optionsLength < 0 ||
+		static_cast<size_t>(options->optionsLength) > MaxUdpOptionBytes)
+		return;
 	if (DNSHandler::IsDNS((PSOCKADDR_IN6)target))
 	{
 		if (!filterDNS)
@@ -872,9 +918,6 @@ void udpSend(ENDPOINT_ID id, const unsigned char* target, const char* buffer, in
 		}
 	}
 
-	if (static_cast<size_t>(length) > MaxUdpPacketBytes || options->optionsLength < 0 ||
-		static_cast<size_t>(options->optionsLength) > MaxUdpOptionBytes)
-		return;
 	SOCKADDR_IN6 copiedTarget{};
 	if (!CopyUdpTarget(target, copiedTarget))
 		return;
@@ -890,6 +933,9 @@ void udpSend(ENDPOINT_ID id, const unsigned char* target, const char* buffer, in
 		}
 		context = it->second;
 	}
+
+	if (static_cast<size_t>(length) > MaxUdpPacketBytes - GetSocksUdpHeaderLength(copiedTarget))
+		return;
 
 	const size_t optionsLength = UdpOptionsHeaderLength + static_cast<size_t>(options->optionsLength);
 	unique_ptr<UdpPacket> packet;

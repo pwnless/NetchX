@@ -36,6 +36,7 @@ namespace SocksHelper
 		bool EnsureReady();
 		bool TryStartReceiver();
 		void ResetReceiver();
+		bool IsStopped() const;
 		void Stop();
 
 		int Send(PSOCKADDR_IN6 target, const char* buffer, int length);
@@ -50,6 +51,7 @@ namespace SocksHelper
 		void Run();
 		void CloseSockets();
 
+		mutex stopLock;
 		mutex socketLock;
 		thread keepAliveThread;
 		atomic_bool stopping = false;

@@ -132,6 +132,22 @@ namespace
 			(length >= 2 && buffer[0] == request.packet[0] && buffer[1] == request.packet[1]);
 	}
 
+	bool IsExpectedResponseSource(const SOCKADDR_IN6& source)
+	{
+		if (source.sin6_family != dnsAddr.sin6_family)
+			return false;
+
+		if (source.sin6_family == AF_INET)
+		{
+			const auto expected = reinterpret_cast<const SOCKADDR_IN*>(&dnsAddr);
+			const auto actual = reinterpret_cast<const SOCKADDR_IN*>(&source);
+			return actual->sin_port == expected->sin_port && actual->sin_addr.s_addr == expected->sin_addr.s_addr;
+		}
+
+		return source.sin6_port == dnsAddr.sin6_port && source.sin6_scope_id == dnsAddr.sin6_scope_id &&
+			memcmp(&source.sin6_addr, &dnsAddr.sin6_addr, sizeof(IN6_ADDR)) == 0;
+	}
+
 	void PostResponse(const DnsRequest& request, char* buffer, int length)
 	{
 		if (request.hasTransactionId)
@@ -199,6 +215,8 @@ namespace
 				transport.ResetRemote();
 				return false;
 			}
+			if (!IsExpectedResponseSource(responseTarget))
+				continue;
 			if (IsExpectedResponse(request, transport.responseBuffer.data(), size))
 			{
 				PostResponse(request, transport.responseBuffer.data(), size);

@@ -28,6 +28,7 @@ namespace
 	atomic_int remoteUdpRequestCount = 0;
 	atomic_bool socksServerHealthy = true;
 	atomic_bool remoteUdpHealthy = true;
+	atomic_bool wrongSourceResponseInjected = false;
 
 	bool ReceiveExact(SOCKET socket, char* buffer, int length, SOCKADDR_IN& peer, int& peerLength)
 	{
@@ -134,6 +135,7 @@ namespace
 		remoteUdpRequestCount = 0;
 		socksServerHealthy = true;
 		remoteUdpHealthy = true;
+		wrongSourceResponseInjected = false;
 
 		USHORT relayPort = 0;
 		USHORT socksPort = 0;
@@ -219,8 +221,28 @@ namespace
 				if (received != 14 || packet[0] != 0 || packet[1] != 0 || packet[2] != 0 || packet[3] != 0x01 ||
 					packet[4] != 0x7f || packet[5] != 0 || packet[6] != 0 || packet[7] != 1 ||
 					static_cast<unsigned char>(packet[8]) != static_cast<unsigned char>(relayPort >> 8) ||
-					static_cast<unsigned char>(packet[9]) != static_cast<unsigned char>(relayPort & 0xff) ||
-					sendto(relay, packet, received, 0, (PSOCKADDR)&peer, peerLength) != received)
+					static_cast<unsigned char>(packet[9]) != static_cast<unsigned char>(relayPort & 0xff))
+				{
+					remoteUdpHealthy = false;
+					return;
+				}
+				if (!wrongSourceResponseInjected.exchange(true))
+				{
+					array<char, 64> wrongSourcePacket{};
+					memcpy(wrongSourcePacket.data(), packet, static_cast<size_t>(received));
+					wrongSourcePacket[4] = 0x7f;
+					wrongSourcePacket[5] = 0x00;
+					wrongSourcePacket[6] = 0x00;
+					wrongSourcePacket[7] = 0x02;
+					wrongSourcePacket[12] = 0x66;
+					wrongSourcePacket[13] = 0x77;
+					if (sendto(relay, wrongSourcePacket.data(), received, 0, (PSOCKADDR)&peer, peerLength) != received)
+					{
+						remoteUdpHealthy = false;
+						return;
+					}
+				}
+				if (sendto(relay, packet, received, 0, (PSOCKADDR)&peer, peerLength) != received)
 				{
 					remoteUdpHealthy = false;
 					return;
@@ -274,7 +296,7 @@ namespace
 		closesocket(listener);
 		closesocket(relay);
 
-		return receivedAll && remoteUdpHealthy && socksServerHealthy &&
+		return receivedAll && remoteUdpHealthy && socksServerHealthy && wrongSourceResponseInjected &&
 			remoteUdpRequestCount == RequestCount && socksAssociations > 0 &&
 			socksAssociations <= static_cast<int>(MaxWorkerSourcePorts);
 	}
@@ -334,7 +356,8 @@ extern "C" NF_STATUS __cdecl TestUdpPostReceive(ENDPOINT_ID id, const unsigned c
 
 	const int index = static_cast<int>(id - 1000);
 	if (static_cast<unsigned char>(buffer[0]) != static_cast<unsigned char>(index) ||
-		static_cast<unsigned char>(buffer[1]) != static_cast<unsigned char>(index >> 8))
+		static_cast<unsigned char>(buffer[1]) != static_cast<unsigned char>(index >> 8) ||
+		static_cast<unsigned char>(buffer[2]) != 0x12 || static_cast<unsigned char>(buffer[3]) != 0x34)
 		return NF_STATUS_FAIL;
 
 	{
