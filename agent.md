@@ -6,14 +6,14 @@ This document describes the current codebase and the constraints that apply when
 
 NetchX is a Windows x64 proxy client. The WinForms application selects a server and a traffic mode. The selected mode forwards traffic to either a directly configured SOCKS5 server or a local SOCKS5 endpoint provided by a protocol controller.
 
-The current release line is `2.0.1`:
+The current release line is `2.0.2`:
 
 - `NetchX/NetchX.csproj` targets `net10.0-windows` and carries matching package metadata.
 - `common.props` defines `net10.0-windows`, `win-x64`, C# `latest`, and nullable-reference support for SDK-style projects.
 - `NetchX/Controllers/UpdateChecker.cs` contains the displayed and release-comparison version.
 - `NetchX/Properties/AssemblyInfo.cs` supplies the effective PE assembly, file, and informational versions because `GenerateAssemblyInfo` is disabled.
 
-When changing the version, update all of these values together. The currently published executable reports assembly and file version `2.0.1.0` and product version `2.0.1`.
+When changing the version, update all of these values together. The currently published executable reports assembly and file version `2.0.2.0` and product version `2.0.2`.
 
 The main application is Per-Monitor V2 DPI aware. `Program.Main` must call `Application.SetHighDpiMode(HighDpiMode.PerMonitorV2)` before any WinForms object, `Global` member, or form is created. Forms use `AutoScaleMode.Dpi` with a 96-DPI design baseline. Do not restore font-based scaling, DPI-unaware mode, or a conflicting DPI declaration in `App.manifest`.
 
@@ -233,7 +233,7 @@ Do not replace one of these binaries without reviewing compatibility, updating i
 To create a GitHub Release archive after a successful build:
 
 ```powershell
-$archive = Join-Path (Get-Location) 'build\NetchX-2.0.1-win-x64.zip'
+$archive = Join-Path (Get-Location) 'build\NetchX-2.0.2-win-x64.zip'
 $items = Get-ChildItem -LiteralPath .\build -Force | Where-Object { $_.FullName -ne $archive } | Select-Object -ExpandProperty FullName
 Compress-Archive -LiteralPath $items -DestinationPath $archive -CompressionLevel Optimal
 Get-FileHash -LiteralPath $archive -Algorithm SHA256
