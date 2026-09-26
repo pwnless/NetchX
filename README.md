@@ -80,7 +80,7 @@ Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transpor
 
 ## Quick start
 
-1. Download `NetchX-2.0.2-win-x64.zip` for your system from [Releases](https://github.com/pwnless/NetchX/releases).
+1. Download `NetchX-2.0.2-win-x64.7z` from [Releases](https://github.com/pwnless/NetchX/releases), or the `.zip` fallback when 7-Zip packaging was unavailable.
 2. **Extract the entire archive** to a writable directory. `bin`, `i18n`, and `mode` alongside `NetchX.exe` are required at runtime.
 3. Run `NetchX.exe` as an administrator, add or import a server, select a mode, and start it.
 
@@ -98,10 +98,10 @@ Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transpor
 ### Create a complete release package
 
 ```powershell
-.\build.ps1 -Configuration Release -OutputPath build
+.\build.ps1 -Configuration Release
 ```
 
-The script publishes the main application, builds `Redirector` and `RouteHelper`, stages external components, and verifies critical package files. The result is written to `build\`.
+The script recreates `release\`, publishes the main application, builds `Redirector` and `RouteHelper`, stages external components, and verifies critical package files. It also creates one distributable archive beside the unpacked layout: `release\NetchX-<version>-win-x64.7z` when 7-Zip is available and passes verification, otherwise `release\NetchX-<version>-win-x64.zip`. Both formats contain a top-level `NetchX\` directory, including `NetchX\NetchX.exe`.
 
 The Xray staging script uses the checked-out sibling release at `..\xray-core\release` by default. When that directory is absent—such as on GitHub Actions—it downloads the pinned Xray 26.3.27 Windows archive and verifies both the archive and its extracted runtime files. Set `NETCHX_XRAY_RELEASE` to another extracted, hash-pinned Xray release directory when building elsewhere.
 

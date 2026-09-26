@@ -16,7 +16,6 @@ jobs:
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
-      NETCHX_BUILD_V2RAY_FROM_SOURCE: "1"
 
     steps:
       - name: Check out source
@@ -82,7 +81,7 @@ jobs:
 
       - name: Build complete release layout
         shell: pwsh
-        run: .\build.ps1 -Configuration Release -OutputPath release
+        run: .\build.ps1 -Configuration Release
 
       - name: Verify release layout
         shell: pwsh
@@ -110,19 +109,22 @@ jobs:
             throw "Release output is incomplete. Missing: $($missingFiles -join ', ')"
           }
 
-      - name: Package release
+      - name: Locate generated release archive
         id: package
         shell: pwsh
         run: |
-          $archive = "NetchX-$env:RELEASE_VERSION-win-x64.zip"
-          $packageRoot = Join-Path $env:RUNNER_TEMP 'netchx-release-package'
-          $payloadRoot = Join-Path $packageRoot 'NetchX'
-          New-Item -ItemType Directory -Path $payloadRoot -Force | Out-Null
-          Copy-Item -Path .\release\* -Destination $payloadRoot -Recurse -Force
-          Compress-Archive -LiteralPath $payloadRoot -DestinationPath $archive -CompressionLevel Optimal
+          $expectedBaseName = "NetchX-$env:RELEASE_VERSION-win-x64"
+          $archives = @(Get-ChildItem -LiteralPath .\release -File | Where-Object {
+            $_.Name -in @("$expectedBaseName.7z", "$expectedBaseName.zip")
+          })
+          if ($archives.Count -ne 1) {
+            throw "Expected exactly one generated release archive for '$expectedBaseName', found $($archives.Count)."
+          }
 
-          $sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $archive = $archives[0]
+          $sha256 = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "archive=$($archive.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "archive_name=$($archive.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "sha256=$sha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Publish GitHub Release
@@ -140,4 +142,4 @@ jobs:
 
             | File name | SHA256 |
             | :- | :- |
-            | ${{ steps.package.outputs.archive }} | ${{ steps.package.outputs.sha256 }} |
+            | ${{ steps.package.outputs.archive_name }} | ${{ steps.package.outputs.sha256 }} |

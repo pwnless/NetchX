@@ -22,6 +22,7 @@ param (
 	$PublishReadyToRun = $False
 )
 
+$ErrorActionPreference = 'Stop'
 Push-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
 
 $repositoryRoot = (Get-Location).Path
@@ -35,19 +36,12 @@ if (-not $msbuild) {
     $msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
 }
 
+$releaseRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot 'release'))
 $outputFullPath = [IO.Path]::GetFullPath($OutputPath, $repositoryRoot)
-$allowedOutputRoots = @(
-    [IO.Path]::GetFullPath((Join-Path $repositoryRoot 'release')),
-    [IO.Path]::GetFullPath((Join-Path $repositoryRoot 'artifacts')),
-    [IO.Path]::GetFullPath((Join-Path $repositoryRoot 'build'))
-)
-
-if (-not ($allowedOutputRoots | Where-Object {
-    $outputFullPath.Equals($_, [StringComparison]::OrdinalIgnoreCase) -or
-    $outputFullPath.StartsWith($_ + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
-})) {
-    throw "OutputPath must be under '$repositoryRoot\release', '$repositoryRoot\artifacts', or '$repositoryRoot\build'."
+if (-not $outputFullPath.Equals($releaseRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "The complete package is always built under '$releaseRoot'. The legacy build/ output directory is no longer supported."
 }
+$outputFullPath = $releaseRoot
 
 if (Test-Path -LiteralPath $outputFullPath) {
     Remove-Item -LiteralPath $outputFullPath -Recurse -Force
@@ -88,11 +82,11 @@ Pop-Location
 if ( -Not $? ) {
 	exit $lastExitCode
 }
-cp -Force '.\Other\release\*.bin' "$OutputPath\bin"
-cp -Force '.\Other\release\*.dll' "$OutputPath\bin"
-cp -Force '.\Other\release\*.exe' "$OutputPath\bin"
-cp -Force '.\Other\release\*.dat' "$OutputPath\bin"
-cp -Force '.\Other\release\*.LICENSE' "$OutputPath\bin"
+cp -Force '.\Other\release\*.bin' "$outputFullPath\bin"
+cp -Force '.\Other\release\*.dll' "$outputFullPath\bin"
+cp -Force '.\Other\release\*.exe' "$outputFullPath\bin"
+cp -Force '.\Other\release\*.dat' "$outputFullPath\bin"
+cp -Force '.\Other\release\*.LICENSE' "$outputFullPath\bin"
 
 Write-Host
 Write-Host 'Building NetchX'
@@ -110,7 +104,7 @@ dotnet publish `
 	-o ".\NetchX\bin\$Configuration" `
 	'.\NetchX\NetchX.csproj'
 if ( -Not $? ) { exit $lastExitCode }
-cp -Force ".\NetchX\bin\$Configuration\NetchX.exe" $OutputPath
+cp -Force ".\NetchX\bin\$Configuration\NetchX.exe" $outputFullPath
 
 Write-Host
 Write-Host 'Building Redirector'
@@ -120,8 +114,8 @@ Write-Host 'Building Redirector'
 	-property:Platform=x64 `
 	'.\Redirector\Redirector.vcxproj'
 if ( -Not $? ) { exit $lastExitCode }
-cp -Force ".\Redirector\bin\$Configuration\nfapi.dll"      "$OutputPath\bin"
-cp -Force ".\Redirector\bin\$Configuration\Redirector.bin" "$OutputPath\bin"
+cp -Force ".\Redirector\bin\$Configuration\nfapi.dll"      "$outputFullPath\bin"
+cp -Force ".\Redirector\bin\$Configuration\Redirector.bin" "$outputFullPath\bin"
 
 Write-Host
 Write-Host 'Building RouteHelper'
@@ -131,7 +125,7 @@ Write-Host 'Building RouteHelper'
 	-property:Platform=x64 `
 	'.\RouteHelper\RouteHelper.vcxproj'
 if ( -Not $? ) { exit $lastExitCode }
-cp -Force ".\RouteHelper\bin\$Configuration\RouteHelper.bin" "$OutputPath\bin"
+cp -Force ".\RouteHelper\bin\$Configuration\RouteHelper.bin" "$outputFullPath\bin"
 
 $requiredFiles = @(
     'NetchX.exe',
@@ -158,9 +152,82 @@ if ($missingFiles.Count -gt 0) {
 }
 
 if ( $Configuration.Equals('Release') ) {
-	rm -Force "$OutputPath\*.pdb"
-	rm -Force "$OutputPath\*.xml"
+    Remove-Item -Path (Join-Path $outputFullPath '*.pdb'), (Join-Path $outputFullPath '*.xml') -Force -ErrorAction SilentlyContinue
 }
+
+function Find-SevenZip {
+    foreach ($name in @('7z.exe', '7z', '7za.exe', '7za')) {
+        $command = Get-Command $name -ErrorAction SilentlyContinue
+        if ($null -ne $command) { return $command.Source }
+    }
+    foreach ($candidate in @('C:\Program Files\7-Zip\7z.exe', 'C:\Program Files (x86)\7-Zip\7z.exe')) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    return $null
+}
+
+$projectText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'NetchX\NetchX.csproj') -Raw
+$versionMatch = [regex]::Match($projectText, '<Version>(?<value>[^<]+)</Version>')
+if (-not $versionMatch.Success) { throw 'Could not read the package version from NetchX/NetchX.csproj.' }
+$archiveBaseName = "NetchX-$($versionMatch.Groups['value'].Value)-win-x64"
+if ($Configuration -ne 'Release') { $archiveBaseName = "$archiveBaseName-debug" }
+$sevenZipArchive = Join-Path $outputFullPath "$archiveBaseName.7z"
+$zipArchive = Join-Path $outputFullPath "$archiveBaseName.zip"
+Remove-Item -LiteralPath $sevenZipArchive, $zipArchive -Force -ErrorAction SilentlyContinue
+
+$packageTemporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "NetchX-package-$([Guid]::NewGuid().ToString('N'))"
+$packagePayloadRoot = Join-Path $packageTemporaryRoot 'NetchX'
+$packageArchive = $null
+try {
+    New-Item -ItemType Directory -Path $packagePayloadRoot -Force | Out-Null
+    Get-ChildItem -LiteralPath $outputFullPath -Force | Where-Object {
+        $_.FullName -ne $sevenZipArchive -and $_.FullName -ne $zipArchive
+    } | Copy-Item -Destination $packagePayloadRoot -Recurse -Force
+
+    $sevenZip = Find-SevenZip
+    if ($sevenZip) {
+        try {
+            Push-Location $packageTemporaryRoot
+            try {
+                & $sevenZip 'a' '-t7z' $sevenZipArchive 'NetchX' | Out-Host
+                if ($LASTEXITCODE -ne 0) { throw "7-Zip create failed with exit code $LASTEXITCODE." }
+                & $sevenZip 't' $sevenZipArchive | Out-Host
+                if ($LASTEXITCODE -ne 0) { throw "7-Zip verification failed with exit code $LASTEXITCODE." }
+                $archiveListing = (& $sevenZip 'l' '-slt' $sevenZipArchive) -join "`n"
+                if ($archiveListing -notmatch '(?m)^Path = NetchX[\\/]NetchX\.exe$') {
+                    throw '7-Zip package does not contain NetchX/NetchX.exe.'
+                }
+            }
+            finally {
+                Pop-Location
+            }
+            $packageArchive = $sevenZipArchive
+        }
+        catch {
+            Write-Warning "7-Zip packaging failed; falling back to ZIP. $($_.Exception.Message)"
+            Remove-Item -LiteralPath $sevenZipArchive -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($null -eq $packageArchive) {
+        Compress-Archive -LiteralPath $packagePayloadRoot -DestinationPath $zipArchive -CompressionLevel Optimal -ErrorAction Stop
+        $zip = [IO.Compression.ZipFile]::OpenRead($zipArchive)
+        try {
+            if (-not ($zip.Entries.FullName -contains 'NetchX/NetchX.exe')) { throw 'ZIP package does not contain NetchX/NetchX.exe.' }
+        }
+        finally { $zip.Dispose() }
+        $packageArchive = $zipArchive
+    }
+}
+finally {
+    Remove-Item -LiteralPath $packageTemporaryRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$packageHash = (Get-FileHash -LiteralPath $packageArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Host
+Write-Host "Release layout: $outputFullPath"
+Write-Host "Release archive: $packageArchive"
+Write-Host "Release archive SHA-256: $packageHash"
 
 Pop-Location
 exit 0

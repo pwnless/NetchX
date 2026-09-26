@@ -32,8 +32,8 @@ The main application is Per-Monitor V2 DPI aware. `Program.Main` must call `Appl
 | `wintun/` | Local Wintun distribution used by the Wintun staging script. |
 | `pcap2socks/` | Local pcap2socks distribution used by the staging script. |
 | `tun2socks.exe` | Local tun2socks 2.7 release binary used by the staging script. |
-| `build.ps1` | Complete-release build script. It only accepts output paths under `release/`, `artifacts/`, or `build/`. |
-| `clean.ps1` | Cleanup script for generated outputs. Pass `-KeepBuild` to preserve a completed release directory. |
+| `build.ps1` | Complete-release build script. It always recreates `release/` and emits a verified `.7z` archive, or a `.zip` fallback when 7-Zip is unavailable or fails. |
+| `clean.ps1` | Cleanup script for generated outputs, including the legacy repository-root `build/` folder and the canonical `release/` folder. |
 
 The solution contains the main application, managed tests, Redirector, RouteHelper, and RedirectorTester. The native projects are x64 projects and use the Visual C++ toolchain.
 
@@ -208,10 +208,10 @@ Do not replace queues, context maps, deadline queues, or worker pools with unbou
 ### Complete release build
 
 ```powershell
-.\build.ps1 -Configuration Release -OutputPath build
+.\build.ps1 -Configuration Release
 ```
 
-The script deletes and recreates the selected output directory, so only pass an approved disposable output location. It performs these steps:
+The script always deletes and recreates the repository-root `release/` directory; it rejects the retired repository-root `build/` output. It performs these steps:
 
 1. Creates the release layout and copies `Storage` assets, including `i18n`, `mode`, the driver, DNS files, and `Storage/README.md`.
 2. Uses a root `Country.mmdb` when present; otherwise downloads the current GeoIP asset and validates its release metadata.
@@ -219,6 +219,7 @@ The script deletes and recreates the selected output directory, so only pass an 
 4. Publishes NetchX as a self-contained, single-file `win-x64` executable.
 5. Builds Redirector and RouteHelper in Release x64 configuration.
 6. Verifies that all required release files are present and removes root-level PDB and XML files for Release output.
+7. Creates `release/NetchX-<version>-win-x64.7z` when 7-Zip is available and its archive test succeeds; otherwise it creates `release/NetchX-<version>-win-x64.zip`. The archive always contains a top-level `NetchX/` directory and is SHA-256 hashed in the build output.
 
 The current staging scripts pin the following local external inputs by SHA-256:
 
@@ -230,14 +231,7 @@ The current staging scripts pin the following local external inputs by SHA-256:
 
 Do not replace one of these binaries without reviewing compatibility, updating its version and digest in the staging script, rebuilding the release, and testing the affected mode.
 
-To create a GitHub Release archive after a successful build:
-
-```powershell
-$archive = Join-Path (Get-Location) 'build\NetchX-2.0.2-win-x64.zip'
-$items = Get-ChildItem -LiteralPath .\build -Force | Where-Object { $_.FullName -ne $archive } | Select-Object -ExpandProperty FullName
-Compress-Archive -LiteralPath $items -DestinationPath $archive -CompressionLevel Optimal
-Get-FileHash -LiteralPath $archive -Algorithm SHA256
-```
+No manual archive command is needed after a successful build. Upload the single generated `release/NetchX-<version>-win-x64.7z` archive, or its `.zip` fallback, and use the SHA-256 printed by `build.ps1`.
 
 ## 8. Verification
 

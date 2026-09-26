@@ -1,8 +1,3 @@
-param (
-    [switch]
-    $KeepBuild
-)
-
 Push-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
 
 function Delete {
@@ -18,9 +13,7 @@ function Delete {
 
 Delete '.vs'
 Delete 'artifacts'
-if (-not $KeepBuild) {
-    Delete 'build'
-}
+Delete 'build'
 Delete 'release'
 Delete 'NetchX\bin'
 Delete 'NetchX\obj'
