@@ -25,6 +25,11 @@ public static class Configuration
 
     private static readonly JsonSerializerOptions JsonSerializerOptions = Global.NewCustomJsonSerializerOptions();
 
+    /// <summary>
+    ///     Startup-only notice populated by a successful settings migration.
+    /// </summary>
+    public static string? PendingMigrationNotice { get; private set; }
+
     static Configuration()
     {
         JsonSerializerOptions.Converters.Add(new ServerConverterWithTypeDiscriminator());
@@ -41,13 +46,23 @@ public static class Configuration
                 return;
             }
 
-            await using var _ = await _lock.ReadLockAsync();
+            var migrated = false;
+            var loaded = false;
+            await using (var _ = await _lock.ReadLockAsync())
+            {
+                (loaded, migrated) = await LoadCoreAsync(FileFullName);
+                if (!loaded)
+                {
+                    Log.Information("Load backup configuration \"{FileName}\"", BackupFileFullName);
+                    (loaded, migrated) = await LoadCoreAsync(BackupFileFullName);
+                }
+            }
 
-            if (await LoadCoreAsync(FileFullName))
-                return;
+            if (!loaded)
+                throw new InvalidDataException("Neither the primary nor backup settings file could be loaded.");
 
-            Log.Information("Load backup configuration \"{FileName}\"", BackupFileFullName);
-            await LoadCoreAsync(BackupFileFullName);
+            if (migrated)
+                await SaveAsync();
         }
         catch (Exception e)
         {
@@ -56,7 +71,7 @@ public static class Configuration
         }
     }
 
-    private static async ValueTask<bool> LoadCoreAsync(string filename)
+    private static async ValueTask<(bool Loaded, bool Migrated)> LoadCoreAsync(string filename)
     {
         try
         {
@@ -67,27 +82,52 @@ public static class Configuration
                 settings = (await JsonSerializer.DeserializeAsync<Setting>(fs, JsonSerializerOptions))!;
             }
 
-            CheckSetting(settings);
+            var migrated = CheckSetting(settings, out var removedSsrCount);
+            if (migrated)
+            {
+                var migrationBackup = Path.Combine(DataDirectoryFullName, $"settings.before-ssr-removal-{DateTime.Now:yyyyMMdd-HHmmssfff}.json");
+                File.Copy(filename, migrationBackup, false);
+                PendingMigrationNotice = $"Removed {removedSsrCount} obsolete ShadowsocksR profile(s). A backup was saved to {migrationBackup}.";
+                Log.Warning("{Notice}", PendingMigrationNotice);
+            }
+
             Global.Settings = settings;
-            return true;
+            return (true, migrated);
         }
         catch (Exception e)
         {
             Log.Error(e, "Load configuration file \"{FileName}\" error ", filename);
-            return false;
+            return (false, false);
         }
     }
 
-    private static void CheckSetting(Setting settings)
+    private static bool CheckSetting(Setting settings, out int removedSsrCount)
     {
+        var migrated = MigrateRemovedSsrProfiles(settings, out removedSsrCount);
+
         settings.Profiles.RemoveAll(p => p.ServerRemark == string.Empty || p.ModeRemark == string.Empty);
+        for (var i = 0; i < settings.Profiles.Count; i++)
+            settings.Profiles[i].Index = i;
 
-        if (settings.Profiles.Any(p => settings.Profiles.Any(p1 => p1 != p && p1.Index == p.Index)))
-            for (var i = 0; i < settings.Profiles.Count; i++)
-                settings.Profiles[i].Index = i;
-
+        settings.ServerComboBoxSelectedIndex = settings.Server.Count == 0
+            ? -1
+            : Math.Clamp(settings.ServerComboBoxSelectedIndex, 0, settings.Server.Count - 1);
         settings.AioDNS.ChinaDNS = DnsUtils.AppendPort(settings.AioDNS.ChinaDNS);
         settings.AioDNS.OtherDNS = DnsUtils.AppendPort(settings.AioDNS.OtherDNS);
+        return migrated;
+    }
+
+    /// <summary>
+    ///     Removes deserialization-only legacy SSR records and quick profiles
+    ///     that no longer resolve to a surviving server.
+    /// </summary>
+    public static bool MigrateRemovedSsrProfiles(Setting settings, out int removedSsrCount)
+    {
+        var removedRemarks = settings.Server.OfType<RemovedShadowsocksRServer>().Select(server => server.Remark).ToHashSet(StringComparer.Ordinal);
+        removedSsrCount = settings.Server.RemoveAll(server => server is RemovedShadowsocksRServer);
+        if (removedRemarks.Count > 0)
+            settings.Profiles.RemoveAll(profile => removedRemarks.Contains(profile.ServerRemark) && !settings.Server.Any(server => server.Remark.Equals(profile.ServerRemark, StringComparison.Ordinal)));
+        return removedSsrCount > 0;
     }
 
     /// <summary>

@@ -33,21 +33,45 @@ public class SSHUtil : IServerUtil
 
     public string GetShareLink(Server s)
     {
-        throw new NotSupportedException("SSH standard share links are not implemented. Use the Ctrl-copy NetchX link instead.");
+        return SingBoxUri.GetShareLink(s);
     }
 
     public IServerController GetController()
     {
-        return new LegacyV2rayController();
+        return new SingBoxController();
     }
 
     public IEnumerable<Server> ParseUri(string text)
     {
-        throw new NotSupportedException("SSH standard share links are not implemented.");
+        var server = SingBoxUri.Parse<SSHServer>(text, "ssh");
+        var uri = new Uri(text);
+        var (user, password) = SingBoxUri.GetUserInfo(uri);
+        server.User = user ?? string.Empty;
+        server.Password = password ?? string.Empty;
+        var query = SingBoxUri.GetQuery(uri);
+        server.PublicKey = query["host_key"];
+        server.PrivateKey = query["private_key"];
+        server.PrivateKeyPassphrase = query["private_key_passphrase"];
+        server.HostKeyAlgorithms = query["host_key_algorithms"];
+        server.ClientVersion = query["client_version"];
+        server.Cipher = query["cipher"];
+        server.Mac = query["mac"];
+        server.KexAlgorithms = query["kex_algorithm"];
+        return new[] { server };
     }
 
     public bool CheckServer(Server s)
     {
-        return true;
+        try
+        {
+            SingBoxConfigUtils.ValidateServer(s);
+            return true;
+        }
+        catch (MessageException e)
+        {
+            Log.Error(e, "Invalid SSH server");
+            return false;
+        }
     }
+
 }

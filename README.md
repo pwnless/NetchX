@@ -58,14 +58,19 @@ The local loopback test suite covers 128 concurrent TCP connections with strict 
 
 - [SOCKS5](https://www.rfc-editor.org/rfc/rfc1928)
 - [Shadowsocks](https://shadowsocks.org/)
-- [ShadowsocksR](https://github.com/shadowsocksrr/shadowsocksr-libev) (legacy fallback)
-- SSH (legacy fallback)
+- SSH (sing-box)
+- AnyTLS (sing-box)
+- Hysteria and Hysteria2 (sing-box)
+- TUIC (sing-box)
+- NaiveProxy (sing-box)
+- ShadowTLS over Shadowsocks (sing-box)
+- HTTP and HTTPS CONNECT proxy
 - [WireGuard](https://www.wireguard.com/)
 - [Trojan](https://trojan-gfw.github.io/trojan/)
 - [VMess](https://www.v2fly.org/)
 - [VLESS](https://xtls.github.io/)
 
-Xray-core is the bundled runtime for all Xray-supported profiles. ShadowsocksR and SSH use a separately bundled, legacy SagerNet fallback because current Xray no longer implements those outbounds. That fallback is compatibility-only; it does not provide Xray's modern transports, REALITY, or Vision features.
+Xray-core remains the bundled runtime for SOCKS5, Shadowsocks, Trojan, VMess, VLESS, WireGuard, and HTTP/HTTPS proxy profiles. sing-box provides SSH plus AnyTLS, Hysteria, Hysteria2, TUIC, NaiveProxy, and ShadowTLS. ShadowsocksR is no longer supported; migrate SSR servers to standard Shadowsocks or another current protocol.
 
 ### Modern Xray transports
 

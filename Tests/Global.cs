@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Diagnostics;
+using System.IO;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -240,74 +242,205 @@ public class Global
     }
 
     [TestMethod]
-    public void OnlySshAndShadowsocksRUseTheLegacyRuntime()
+    public void SingBoxOwnsOnlySingBoxProfiles()
     {
-        Assert.IsTrue(MainController.UsesLegacyV2rayFallback(new SSHServer()));
-        Assert.IsTrue(MainController.UsesLegacyV2rayFallback(new ShadowsocksRServer()));
-        Assert.IsFalse(MainController.UsesLegacyV2rayFallback(new VLESSServer()));
-        Assert.IsFalse(MainController.UsesLegacyV2rayFallback(new VMessServer()));
-        Assert.IsFalse(MainController.UsesLegacyV2rayFallback(new ShadowsocksServer()));
+        Assert.IsTrue(MainController.UsesSingBoxRuntime(new SSHServer()));
+        Assert.IsTrue(MainController.UsesSingBoxRuntime(new AnyTlsServer()));
+        Assert.IsTrue(MainController.UsesSingBoxRuntime(new HysteriaServer()));
+        Assert.IsTrue(MainController.UsesSingBoxRuntime(new Hysteria2Server()));
+        Assert.IsTrue(MainController.UsesSingBoxRuntime(new TuicServer()));
+        Assert.IsTrue(MainController.UsesSingBoxRuntime(new NaiveServer()));
+        Assert.IsTrue(MainController.UsesSingBoxRuntime(new ShadowTlsServer()));
+        Assert.IsFalse(MainController.UsesSingBoxRuntime(new VLESSServer()));
+        Assert.IsFalse(MainController.UsesSingBoxRuntime(new VMessServer()));
+        Assert.IsFalse(MainController.UsesSingBoxRuntime(new ShadowsocksServer()));
+        Assert.IsFalse(MainController.UsesSingBoxRuntime(new HttpProxyServer()));
     }
 
     [TestMethod]
-    public async Task LegacySagerNetConfigContainsTheShadowsocksRPluginAsync()
+    public async Task SingBoxConfigsCarryProtocolFieldsAsync()
     {
-        var server = new ShadowsocksRServer
+        var cases = new Server[]
         {
-            Hostname = "127.0.0.1",
-            Port = 8388,
-            EncryptMethod = "aes-256-cfb",
-            Password = "password",
-            Protocol = "auth_aes128_sha1",
-            ProtocolParam = "user-id:password",
-            OBFS = "tls1.2_ticket_auth",
-            OBFSParam = "example.com"
+            new AnyTlsServer { Hostname = "127.0.0.1", Port = 443, Password = "password", ServerName = "localhost" },
+            new HysteriaServer { Hostname = "127.0.0.1", Port = 443, UpMbps = 100, DownMbps = 100, Auth = "password" },
+            new Hysteria2Server { Hostname = "127.0.0.1", Port = 443, Password = "password", ObfsType = "salamander", ObfsPassword = "obfs" },
+            new TuicServer { Hostname = "127.0.0.1", Port = 443, UserID = "bf000d23-0752-40b4-affe-68f7707a9661", Password = "password" },
+            new NaiveServer { Hostname = "127.0.0.1", Port = 443, Username = "user", Password = "password", Certificate = "-----BEGIN CERTIFICATE-----\nvalue\n-----END CERTIFICATE-----" },
+            new ShadowTlsServer { Hostname = "127.0.0.1", Port = 443, Version = 3, Password = "outer", EncryptMethod = "aes-128-gcm", ShadowsocksPassword = "inner" },
+            new SSHServer { Hostname = "127.0.0.1", Port = 22, User = "root", Password = "password", PublicKey = "ssh-ed25519 AAAA" }
         };
 
-        var config = await LegacyV2rayConfigUtils.GenerateClientConfigAsync(server);
+        foreach (var source in cases)
+        {
+            var config = await SingBoxConfigUtils.GenerateClientConfigAsync(source, "127.0.0.1", 2801);
+            var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
+            using var document = JsonDocument.Parse(json);
+            Assert.AreEqual("socks", document.RootElement.GetProperty("inbounds")[0].GetProperty("type").GetString());
+            Assert.IsTrue(document.RootElement.GetProperty("outbounds").GetArrayLength() >= 1);
+        }
+
+        var shadowConfig = await SingBoxConfigUtils.GenerateClientConfigAsync((ShadowTlsServer)cases[5], "127.0.0.1", 2801);
+        var shadowJson = JsonSerializer.Serialize(shadowConfig, NetchX.Global.NewCustomJsonSerializerOptions());
+        using var shadowDocument = JsonDocument.Parse(shadowJson);
+        Assert.AreEqual("shadowsocks", shadowDocument.RootElement.GetProperty("outbounds")[0].GetProperty("type").GetString());
+        Assert.AreEqual("shadowtls", shadowDocument.RootElement.GetProperty("outbounds")[1].GetProperty("type").GetString());
+    }
+
+    [TestMethod]
+    public void SingBoxUrisAndNetchXLinksRoundTrip()
+    {
+        var source = new Hysteria2Server
+        {
+            Hostname = "hy2.example.test",
+            Port = 443,
+            Password = "password",
+            ServerName = "cdn.example.test",
+            ObfsType = "salamander",
+            ObfsPassword = "obfs",
+            Remark = "HY2"
+        };
+        var uri = ShareLink.GetShareLink(source);
+        var parsed = ShareLink.ParseText(uri).Single();
+        Assert.IsInstanceOfType<Hysteria2Server>(parsed);
+        Assert.AreEqual(source.Hostname, parsed.Hostname);
+        Assert.AreEqual(source.Password, ((Hysteria2Server)parsed).Password);
+
+        Server complex = new ShadowTlsServer
+        {
+            Hostname = "shadow.example.test",
+            Port = 443,
+            Password = "outer",
+            EncryptMethod = "aes-128-gcm",
+            ShadowsocksPassword = "inner",
+            Remark = "Shadow"
+        };
+        var netchXLink = ShareLink.GetNetchXLink(complex);
+        var parsedComplex = ShareLink.ParseText(netchXLink).Single();
+        Assert.IsInstanceOfType<ShadowTlsServer>(parsedComplex);
+        Assert.AreEqual("inner", ((ShadowTlsServer)parsedComplex).ShadowsocksPassword);
+    }
+
+    [TestMethod]
+    public void PlainShadowsocksRLinkMigratesToShadowsocks()
+    {
+        var endpoint = "127.0.0.1:8388:origin:aes-256-gcm:plain:" + ShareLink.URLSafeBase64Encode("password") + "/?remarks=" + ShareLink.URLSafeBase64Encode("legacy");
+        var parsed = ShareLink.ParseText("ssr://" + ShareLink.URLSafeBase64Encode(endpoint)).Single();
+        Assert.IsInstanceOfType<ShadowsocksServer>(parsed);
+        Assert.AreEqual("password", ((ShadowsocksServer)parsed).Password);
+    }
+
+    [TestMethod]
+    public void TcpOnlySingBoxProfilesDeclareNoUdpCapability()
+    {
+        Assert.IsFalse(new SSHServer().NetworkCapabilities.HasFlag(ServerNetworkCapability.Udp));
+        Assert.IsFalse(new ShadowTlsServer().NetworkCapabilities.HasFlag(ServerNetworkCapability.Udp));
+        Assert.IsFalse(new NaiveServer().NetworkCapabilities.HasFlag(ServerNetworkCapability.Udp));
+        Assert.IsTrue(new NaiveServer { UdpOverTcp = true }.NetworkCapabilities.HasFlag(ServerNetworkCapability.Udp));
+        Assert.IsTrue(new AnyTlsServer().NetworkCapabilities.HasFlag(ServerNetworkCapability.Udp));
+        Assert.IsTrue(new TuicServer().NetworkCapabilities.HasFlag(ServerNetworkCapability.Udp));
+    }
+
+    [TestMethod]
+    public async Task XrayHttpProxyConfigUsesHttpOutboundAsync()
+    {
+        var server = new HttpProxyServer
+        {
+            Hostname = "127.0.0.1",
+            Port = 8080,
+            Username = "user",
+            Password = "password",
+            Headers = "{\"X-Test\":\"value\"}",
+            UseTls = true,
+            ServerName = "proxy.example.test"
+        };
+        var config = await V2rayConfigUtils.GenerateClientConfigAsync(server);
         var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
         using var document = JsonDocument.Parse(json);
-        var outbound = document.RootElement.GetProperty("outbounds")[0];
-        var settings = outbound.GetProperty("settings");
+        Assert.AreEqual("http", document.RootElement.GetProperty("outbounds")[0].GetProperty("protocol").GetString());
+        var stream = document.RootElement.GetProperty("outbounds")[0].GetProperty("streamSettings");
+        Assert.IsFalse(stream.TryGetProperty("allowInsecure", out _));
+    }
 
-        Assert.AreEqual("shadowsocks", outbound.GetProperty("protocol").GetString());
-        Assert.AreEqual("shadowsocksr", settings.GetProperty("plugin").GetString());
-        CollectionAssert.AreEqual(
-            new[]
+    [TestMethod]
+    public async Task SingBoxGeneratedConfigsPassPinnedLocalRuntimeCheckAsync()
+    {
+        var binary = FindWorkspaceFile("Other", "sing-box", "sing-box.exe");
+        if (binary == null)
+            return;
+
+        var servers = new Server[]
+        {
+            new AnyTlsServer { Hostname = "127.0.0.1", Port = 443, Password = "password" },
+            new HysteriaServer { Hostname = "127.0.0.1", Port = 443, UpMbps = 100, DownMbps = 100, Auth = "password", ServerPorts = "2000:3000", HopInterval = "30s" },
+            new Hysteria2Server { Hostname = "127.0.0.1", Port = 443, Password = "password", ServerPorts = "2000:3000", HopInterval = "30s" },
+            new TuicServer { Hostname = "127.0.0.1", Port = 443, UserID = "bf000d23-0752-40b4-affe-68f7707a9661", Password = "password" },
+            new NaiveServer { Hostname = "127.0.0.1", Port = 443, Username = "user", Password = "password", Certificate = "-----BEGIN CERTIFICATE-----\nvalue\n-----END CERTIFICATE-----" },
+            new ShadowTlsServer { Hostname = "127.0.0.1", Port = 443, Password = "outer", EncryptMethod = "aes-128-gcm", ShadowsocksPassword = "inner" },
+            new SSHServer { Hostname = "127.0.0.1", Port = 22, User = "root", Password = "password" }
+        };
+
+        foreach (var server in servers)
+        {
+            var config = await SingBoxConfigUtils.GenerateClientConfigAsync(server, "127.0.0.1", 2801);
+            var configPath = Path.Combine(Path.GetTempPath(), $"netchx-sing-box-{Guid.NewGuid():N}.json");
+            try
             {
-                "--obfs=tls1.2_ticket_auth",
-                "--obfs-param=example.com",
-                "--protocol=auth_aes128_sha1",
-                "--protocol-param=user-id:password"
-            },
-            settings.GetProperty("pluginArgs").EnumerateArray().Select(argument => argument.GetString()).ToArray());
+                await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions()));
+                using var process = Process.Start(new ProcessStartInfo(binary, $"check -c \"{configPath}\"")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                })!;
+                await process.WaitForExitAsync();
+                var output = await process.StandardOutput.ReadToEndAsync() + await process.StandardError.ReadToEndAsync();
+                Assert.AreEqual(0, process.ExitCode, $"sing-box rejected {server.Type}: {output}");
+            }
+            finally
+            {
+                File.Delete(configPath);
+            }
+        }
     }
 
     [TestMethod]
-    public async Task LegacySagerNetConfigContainsTheSshOutboundAsync()
+    public void SsrSettingsMigrationRemovesOnlyLegacyRecordsAndProfiles()
     {
-        var server = new SSHServer
-        {
-            Hostname = "127.0.0.1",
-            Port = 22,
-            User = "netch",
-            Password = "password",
-            PrivateKey = "private-key",
-            PublicKey = "host-public-key"
-        };
+        var options = NetchX.Global.NewCustomJsonSerializerOptions();
+        options.Converters.Add(new NetchX.JsonConverter.ServerConverterWithTypeDiscriminator());
+        var settings = JsonSerializer.Deserialize<Setting>("""
+            {
+              "Server": [
+                { "Type": "SSR", "Hostname": "ssr.example.test", "Port": 8388, "Remark": "legacy" },
+                { "Type": "SOCKS", "Hostname": "socks.example.test", "Port": 1080, "Remark": "current" }
+              ],
+              "Profiles": [
+                { "Index": 0, "ServerRemark": "legacy", "ModeRemark": "Process", "ProfileName": "legacy profile" },
+                { "Index": 1, "ServerRemark": "current", "ModeRemark": "Process", "ProfileName": "current profile" }
+              ]
+            }
+            """, options)!;
 
-        var config = await LegacyV2rayConfigUtils.GenerateClientConfigAsync(server);
-        var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
-        using var document = JsonDocument.Parse(json);
-        var outbound = document.RootElement.GetProperty("outbounds")[0];
-        var settings = outbound.GetProperty("settings");
+        var migrated = Configuration.MigrateRemovedSsrProfiles(settings, out var removed);
 
-        Assert.AreEqual("ssh", outbound.GetProperty("protocol").GetString());
-        Assert.AreEqual("127.0.0.1", settings.GetProperty("address").GetString());
-        Assert.AreEqual(22, settings.GetProperty("port").GetInt32());
-        Assert.AreEqual("netch", settings.GetProperty("user").GetString());
-        Assert.AreEqual("password", settings.GetProperty("password").GetString());
-        Assert.AreEqual("private-key", settings.GetProperty("privateKey").GetString());
-        Assert.AreEqual("host-public-key", settings.GetProperty("publicKey").GetString());
+        Assert.IsTrue(migrated);
+        Assert.AreEqual(1, removed);
+        Assert.AreEqual(1, settings.Server.Count);
+        Assert.AreEqual("current", settings.Server.Single().Remark);
+        Assert.AreEqual(1, settings.Profiles.Count);
+        Assert.AreEqual("current", settings.Profiles.Single().ServerRemark);
     }
+
+    private static string FindWorkspaceFile(params string[] pathParts)
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
+        {
+            var candidate = Path.Combine(new[] { directory.FullName }.Concat(pathParts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+        }
+        return null;
+    }
+
 }

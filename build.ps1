@@ -92,6 +92,7 @@ cp -Force '.\Other\release\*.bin' "$OutputPath\bin"
 cp -Force '.\Other\release\*.dll' "$OutputPath\bin"
 cp -Force '.\Other\release\*.exe' "$OutputPath\bin"
 cp -Force '.\Other\release\*.dat' "$OutputPath\bin"
+cp -Force '.\Other\release\*.LICENSE' "$OutputPath\bin"
 
 Write-Host
 Write-Host 'Building NetchX'
@@ -143,7 +144,9 @@ $requiredFiles = @(
     'bin\pcap2socks.exe',
     'bin\tun2socks.exe',
     'bin\xray.exe',
-    'bin\v2ray-sn.exe',
+    'bin\sing-box.exe',
+    'bin\libcronet.dll',
+    'bin\sing-box.LICENSE',
     'bin\geoip.dat',
     'bin\geosite.dat',
     'bin\wintun.dll',

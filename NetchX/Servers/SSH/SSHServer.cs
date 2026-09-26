@@ -30,4 +30,37 @@ public class SSHServer : Server
     ///     Host public key.
     /// </summary>
     public string? PublicKey { get; set; }
+
+    /// <summary>
+    ///     Private-key passphrase.
+    /// </summary>
+    public string? PrivateKeyPassphrase { get; set; }
+
+    /// <summary>
+    ///     Allowed host-key algorithms, separated by commas.
+    /// </summary>
+    public string? HostKeyAlgorithms { get; set; }
+
+    /// <summary>
+    ///     SSH client identification string.
+    /// </summary>
+    public string? ClientVersion { get; set; }
+
+    /// <summary>
+    ///     Allowed ciphers, separated by commas.
+    /// </summary>
+    public string? Cipher { get; set; }
+
+    /// <summary>
+    ///     Allowed MAC algorithms, separated by commas.
+    /// </summary>
+    public string? Mac { get; set; }
+
+    /// <summary>
+    ///     Allowed key-exchange algorithms, separated by commas.
+    /// </summary>
+    public string? KexAlgorithms { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public override ServerNetworkCapability NetworkCapabilities => ServerNetworkCapability.Tcp;
 }

@@ -19,11 +19,11 @@ https://www.maxmind.com
 ## xray-core
 https://github.com/xtls/xray-core
 
+## sing-box
+https://github.com/SagerNet/sing-box
+
 ## shadowsocks-libev
 https://github.com/shadowsocks/shadowsocks-rust
-
-## shadowsocksr-libev
-https://github.com/shadowsocksrr/shadowsocksr-libev
 
 ## simple-obfs
 https://github.com/shadowsocks/simple-obfs

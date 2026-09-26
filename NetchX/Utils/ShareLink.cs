@@ -77,6 +77,10 @@ public static class ShareLink
         {
             list.Add(ParseNetchXUri(text));
         }
+        else if (text.StartsWith("ssr://", StringComparison.OrdinalIgnoreCase))
+        {
+            list.Add(ParseLegacySsrUri(text));
+        }
         else
         {
             var scheme = GetUriScheme(text);
@@ -91,6 +95,49 @@ public static class ShareLink
             node.Remark = RemoveEmoji(node.Remark);
 
         return list;
+    }
+
+
+    public static Server ParseLegacySsrUri(string text)
+    {
+        var encoded = text["ssr://".Length..];
+        var value = URLSafeBase64Decode(encoded);
+        var parameterIndex = value.IndexOf('?', StringComparison.Ordinal);
+        var endpoint = parameterIndex >= 0 ? value[..parameterIndex] : value;
+        var parameters = parameterIndex >= 0 ? ParseLegacySsrParameters(value[(parameterIndex + 1)..]) : new Dictionary<string, string>();
+        var fields = endpoint.Split(':');
+        if (fields.Length < 6 || !ushort.TryParse(fields[1], out var port))
+            throw new FormatException();
+
+        var protocol = fields[2].Replace("_compatible", string.Empty, StringComparison.OrdinalIgnoreCase);
+        var method = fields[3];
+        var obfs = fields[4].Replace("_compatible", string.Empty, StringComparison.OrdinalIgnoreCase);
+        if (!protocol.Equals("origin", StringComparison.OrdinalIgnoreCase) || !obfs.Equals("plain", StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException("ShadowsocksR is no longer supported. Only SSR links that represent plain standard Shadowsocks can be imported.");
+        if (!SSGlobal.EncryptMethods.Contains(method))
+            throw new FormatException();
+
+        var password = URLSafeBase64Decode(fields[5].Split('/')[0]);
+        var server = new ShadowsocksServer
+        {
+            Hostname = fields[0],
+            Port = port,
+            EncryptMethod = method,
+            Password = password
+        };
+        if (parameters.TryGetValue("remarks", out var remark))
+            server.Remark = URLSafeBase64Decode(remark);
+        if (parameters.TryGetValue("group", out var group))
+            server.Group = URLSafeBase64Decode(group);
+        return server;
+    }
+
+    private static Dictionary<string, string> ParseLegacySsrParameters(string value)
+    {
+        return value.Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(item => item.Split('=', 2))
+            .Where(item => item.Length == 2)
+            .ToDictionary(item => item[0], item => item[1], StringComparer.OrdinalIgnoreCase);
     }
 
     public static string GetUriScheme(string text)
@@ -116,11 +163,14 @@ public static class ShareLink
             !(port.ValueKind == JsonValueKind.String && ushort.TryParse(port.GetString(), out _)))
             throw new FormatException();
 
-        return JsonSerializer.Deserialize<Server>(text,
+        var server = JsonSerializer.Deserialize<Server>(text,
             new JsonSerializerOptions
             {
                 Converters = { new ServerConverterWithTypeDiscriminator() }
             })!;
+        if (server is RemovedShadowsocksRServer)
+            throw new NotSupportedException("ShadowsocksR profiles are no longer supported. Migrate this server to standard Shadowsocks or a current protocol.");
+        return server;
     }
 
     public static string GetNetchXLink(Server s)

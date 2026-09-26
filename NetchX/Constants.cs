@@ -3,6 +3,7 @@
 public static class Constants
 {
     public const string TempConfig = "data\\last.json";
+    public const string SingBoxTempConfig = "data\\sing-box.json";
     public const string TempRouteFile = "data\\route.txt";
 
     public const string AioDnsRuleFile = "bin\\aiodns.conf";

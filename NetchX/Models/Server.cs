@@ -4,6 +4,13 @@ using NetchX.Utils;
 
 namespace NetchX.Models;
 
+[Flags]
+public enum ServerNetworkCapability
+{
+    Tcp = 1,
+    Udp = 2
+}
+
 public abstract class Server : ICloneable
 {
     /// <summary>
@@ -62,6 +69,12 @@ public abstract class Server : ICloneable
     }
 
     public abstract string MaskedData();
+
+    /// <summary>
+    ///     Networks that this server profile can proxy through its selected runtime.
+    /// </summary>
+    [JsonIgnore]
+    public virtual ServerNetworkCapability NetworkCapabilities => ServerNetworkCapability.Tcp | ServerNetworkCapability.Udp;
 
     /// <summary>
     ///     Tests server latency.

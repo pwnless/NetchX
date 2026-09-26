@@ -31,6 +31,12 @@ public static class MainController
 
         try
         {
+            if (!ServerHelper.GetUtilByTypeName(server.Type).CheckServer(server))
+                throw new MessageException($"Invalid {server.Type} server configuration.");
+
+            if (RequiresUdpProxy(server, mode))
+                throw new MessageException($"{server.Type} does not support UDP, but the selected mode proxies UDP or proxied DNS. Disable UDP and proxied DNS for this mode or choose a UDP-capable server.");
+
             if (await DnsUtils.LookupAsync(server.Hostname) == null)
                 throw new MessageException(i18N.Translate("Lookup Server hostname failed"));
 
@@ -101,19 +107,34 @@ public static class MainController
     }
 
     /// <summary>
-    ///     Xray-core is the default runtime. The bundled legacy SagerNet
-    ///     binary exists solely for its SSH and ShadowsocksR outbounds.
+    ///     Xray remains the default runtime for the existing Xray-owned
+    ///     profiles. sing-box owns SSH and the additional modern protocols.
     /// </summary>
     public static IServerController CreateServerController(Server server)
     {
-        return UsesLegacyV2rayFallback(server)
-            ? new LegacyV2rayController()
+        return UsesSingBoxRuntime(server)
+            ? new SingBoxController()
             : new XrayController();
     }
 
-    public static bool UsesLegacyV2rayFallback(Server server)
+    public static bool UsesSingBoxRuntime(Server server)
     {
-        return server is SSHServer or ShadowsocksRServer;
+        return server is SSHServer or AnyTlsServer or HysteriaServer or Hysteria2Server or TuicServer or NaiveServer or ShadowTlsServer;
+    }
+
+    private static bool RequiresUdpProxy(Server server, Mode mode)
+    {
+        if (server.NetworkCapabilities.HasFlag(ServerNetworkCapability.Udp))
+            return false;
+
+        return mode switch
+        {
+            NetchX.Models.Modes.ProcessMode.Redirector processMode =>
+                (processMode.FilterUDP ?? Global.Settings.Redirector.FilterUDP) ||
+                ((processMode.FilterDNS ?? Global.Settings.Redirector.FilterDNS) &&
+                 (processMode.DNSProxy ?? Global.Settings.Redirector.DNSProxy)),
+            _ => true
+        };
     }
 
     private static async Task StopCoreAsync()

@@ -1,3 +1,4 @@
+using System.Text.Json;
 ﻿using NetchX.Models;
 using NetchX.Utils;
 
@@ -173,8 +174,6 @@ public static class V2rayConfigUtils
                     };
                 }
                 break;
-            case ShadowsocksRServer:
-                throw new MessageException("ShadowsocksR is not supported by the bundled Xray-core runtime. Use a standard Shadowsocks profile or install a dedicated SSR controller.");
              case TrojanServer trojan:
                 outbound.protocol = "trojan";
                 outbound.settings.servers = new[]
@@ -226,8 +225,37 @@ public static class V2rayConfigUtils
                 }
                 break;
 
+            case HttpProxyServer http:
+            {
+                if (http.UseTls && http.AllowInsecure)
+                    throw new MessageException("Current Xray-core no longer supports insecure TLS verification for HTTP CONNECT outbounds.");
+                outbound.protocol = "http";
+                outbound.settings.servers = new object[]
+                {
+                    new
+                    {
+                        address = await server.AutoResolveHostnameAsync(),
+                        port = server.Port,
+                        users = string.IsNullOrWhiteSpace(http.Username)
+                            ? null
+                            : new[] { new { user = http.Username, pass = http.Password ?? string.Empty } },
+                        path = http.Path,
+                        headers = ParseHttpHeaders(http.Headers)
+                    }
+                };
+                if (http.UseTls)
+                {
+                    outbound.streamSettings = new StreamSettings
+                    {
+                        method = "raw",
+                        security = "tls",
+                        tlsSettings = BuildTlsSettings(http.ServerName.ValueOrDefault() ?? http.Hostname, http.UTLSFingerprint)
+                    };
+                }
+                break;
+            }
             case SSHServer:
-                throw new MessageException("SSH is not supported by the bundled Xray-core runtime. Use a dedicated SSH controller for this profile.");
+                throw new MessageException("SSH is not supported by the bundled Xray-core runtime. Use the sing-box controller for this profile.");
         }
 
         return outbound;
@@ -385,7 +413,9 @@ public static class V2rayConfigUtils
     {
         return new TlsSettings
         {
-            allowInsecure = Global.Settings.V2RayConfig.AllowInsecure,
+            // Xray 26.x removed allowInsecure. Omitting the field preserves
+            // normal certificate validation for every TLS outbound.
+            allowInsecure = null,
             serverName = serverName ?? string.Empty,
             fingerprint = string.IsNullOrWhiteSpace(fingerprint) ? "chrome" : fingerprint
         };
@@ -444,4 +474,22 @@ public static class V2rayConfigUtils
         }
         return uuid.GenerateUUIDv5();
     }
+    private static object? ParseHttpHeaders(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new JsonException();
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            throw new MessageException("HTTP proxy headers must be a JSON object.");
+        }
+    }
+
 }

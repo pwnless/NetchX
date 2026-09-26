@@ -133,7 +133,7 @@ public class StreamSettings
 
 public class TlsSettings
 {
-    public bool allowInsecure { get; set; }
+    public bool? allowInsecure { get; set; }
 
     public string serverName { get; set; }
 

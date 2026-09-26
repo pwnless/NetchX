@@ -94,6 +94,9 @@ public static class Program
         // load i18n
         i18N.Load(Global.Settings.Language);
 
+        if (!string.IsNullOrWhiteSpace(Configuration.PendingMigrationNotice))
+            MessageBoxX.Show(Configuration.PendingMigrationNotice, LogLevel.WARNING);
+
         // log environment information
         LogEnvironmentAsync().Forget();
         CheckClr();
