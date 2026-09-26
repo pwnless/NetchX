@@ -19,7 +19,7 @@
   <a href="#whats-new-since-197">1.9.7 → 2.0.0</a>
 </p>
 
-> The current release line is **2.0.2**. It retains NetchX's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
+> The current release line is **2.0.3**. It retains NetchX's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
 
 ## What's new since 1.9.7
 
@@ -80,7 +80,7 @@ Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transpor
 
 ## Quick start
 
-1. Download `NetchX-2.0.2-win-x64.7z` from [Releases](https://github.com/pwnless/NetchX/releases), or the `.zip` fallback when 7-Zip packaging was unavailable.
+1. Download `NetchX-2.0.3-win-x64.7z` from [Releases](https://github.com/pwnless/NetchX/releases), or the `.zip` fallback when 7-Zip packaging was unavailable.
 2. **Extract the entire archive** to a writable directory. `bin`, `i18n`, and `mode` alongside `NetchX.exe` are required at runtime.
 3. Run `NetchX.exe` as an administrator, add or import a server, select a mode, and start it.
 
