@@ -13,11 +13,13 @@ try {
     }
     if (-not $gcc) {
         $gccCandidates = @(
-            'E:\msys64\ucrt64\bin\gcc.exe',
-            'C:\msys64\ucrt64\bin\gcc.exe',
-            'E:\msys64\mingw64\bin\gcc.exe',
-            'C:\msys64\mingw64\bin\gcc.exe'
-        ) | Where-Object { Test-Path -LiteralPath $_ }
+            @(
+                'E:\msys64\ucrt64\bin\gcc.exe',
+                'C:\msys64\ucrt64\bin\gcc.exe',
+                'E:\msys64\mingw64\bin\gcc.exe',
+                'C:\msys64\mingw64\bin\gcc.exe'
+            ) | Where-Object { Test-Path -LiteralPath $_ }
+        )
         if ($gccCandidates.Count -gt 0) {
             $gcc = $gccCandidates[0]
         }
