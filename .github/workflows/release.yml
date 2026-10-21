@@ -52,25 +52,32 @@ jobs:
         with:
           go-version: "1.22.x"
 
-      - name: Set up MSYS2 compiler
+      - name: Set up MSYS2 UCRT64 compiler
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-gcc
+            mingw-w64-ucrt-x86_64-gcc
 
       - name: Add MSYS2 compiler to PATH
         shell: pwsh
-        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value 'C:\msys64\mingw64\bin'
+        run: |
+          $compilerBin = Join-Path '${{ steps.msys2.outputs.msys2-location }}' 'ucrt64\bin'
+          if (-not (Test-Path -LiteralPath (Join-Path $compilerBin 'gcc.exe'))) {
+            throw "The MSYS2 UCRT64 GCC compiler was not installed at '$compilerBin'."
+          }
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $compilerBin
 
       - name: Configure AioDNS source-build toolchain
         shell: pwsh
         run: |
           $go = (Get-Command go.exe -ErrorAction Stop).Source
-          $gcc = 'C:\msys64\mingw64\bin\gcc.exe'
+          $msys2Root = '${{ steps.msys2.outputs.msys2-location }}'
+          $gcc = Join-Path $msys2Root 'ucrt64\bin\gcc.exe'
           if (-not (Test-Path -LiteralPath $gcc)) {
-            throw "Expected the MSYS2 MinGW-w64 GCC compiler at '$gcc'."
+            throw "Expected the MSYS2 UCRT64 GCC compiler at '$gcc'."
           }
 
           $goRoot = (& $go env GOROOT).Trim()
