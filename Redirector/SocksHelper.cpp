@@ -516,13 +516,6 @@ void SocksHelper::UDP::Stop()
 		closesocket(udp);
 	}
 
-	if (keepAliveThread.joinable())
-	{
-		if (keepAliveThread.get_id() == this_thread::get_id())
-			keepAliveThread.detach();
-		else
-			keepAliveThread.join();
-	}
 }
 
 bool SocksHelper::UDP::AssociateLocked()
@@ -624,7 +617,6 @@ bool SocksHelper::UDP::CreateUDPLocked()
 		return false;
 	}
 
-	keepAliveThread = thread(&SocksHelper::UDP::Run, this);
 	return true;
 }
 
@@ -673,33 +665,43 @@ bool SocksHelper::UDP::IsStopped() const
 	return stopping;
 }
 
-void SocksHelper::UDP::Run()
+bool SocksHelper::UDP::TryStartControlMonitor()
 {
-	SOCKET socket;
-	{
-		lock_guard<mutex> lock(socketLock);
-		socket = tcpSocket;
-	}
-
-	char buffer[256];
-	while (!stopping && socket != INVALID_SOCKET)
-	{
-		// SOCKS5 UDP ASSOCIATE keeps this TCP connection open as the association
-		// lifetime. It is not an echo protocol: wait for closure and discard any
-		// unexpected control bytes instead of manufacturing a response.
-		if (recv(socket, buffer, sizeof(buffer), 0) <= 0)
-			break;
-	}
-
-	stopping = true;
-	SOCKET udp;
-	{
-		lock_guard<mutex> lock(socketLock);
-		udp = udpSocket;
-	}
-	if (udp != INVALID_SOCKET)
-		shutdown(udp, SD_BOTH);
+	bool expected = false;
+	return !stopping && controlMonitorStarted.compare_exchange_strong(expected, true);
 }
+
+void SocksHelper::UDP::ResetControlMonitor()
+{
+	controlMonitorStarted = false;
+}
+
+bool SocksHelper::UDP::AssociateControlReceivePort(HANDLE completionPort)
+{
+	if (completionPort == NULL)
+		return false;
+
+	lock_guard<mutex> lock(socketLock);
+	if (stopping || tcpSocket == INVALID_SOCKET)
+		return false;
+
+	return CreateIoCompletionPort((HANDLE)tcpSocket, completionPort, 0, 0) == completionPort;
+}
+
+bool SocksHelper::UDP::BeginControlReceive(WSABUF* buffer, OVERLAPPED* overlapped)
+{
+	if (buffer == NULL || overlapped == NULL)
+		return false;
+
+	lock_guard<mutex> lock(socketLock);
+	if (stopping || tcpSocket == INVALID_SOCKET)
+		return false;
+
+	DWORD flags = 0;
+	const int result = WSARecv(tcpSocket, buffer, 1, NULL, &flags, overlapped, NULL);
+	return result == 0 || WSAGetLastError() == WSA_IO_PENDING;
+}
+
 int SocksHelper::UDP::Send(PSOCKADDR_IN6 target, const char* buffer, int length)
 {
 	if (length < 0 || stopping)

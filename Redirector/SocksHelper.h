@@ -36,6 +36,10 @@ namespace SocksHelper
 		bool EnsureReady();
 		bool TryStartReceiver();
 		void ResetReceiver();
+		bool TryStartControlMonitor();
+		void ResetControlMonitor();
+		bool AssociateControlReceivePort(HANDLE completionPort);
+		bool BeginControlReceive(WSABUF* buffer, OVERLAPPED* overlapped);
 		bool IsStopped() const;
 		void Stop();
 
@@ -48,14 +52,13 @@ namespace SocksHelper
 	private:
 		bool AssociateLocked();
 		bool CreateUDPLocked();
-		void Run();
 		void CloseSockets();
 
 		mutex stopLock;
 		mutex socketLock;
-		thread keepAliveThread;
 		atomic_bool stopping = false;
 		atomic_bool receiverStarted = false;
+		atomic_bool controlMonitorStarted = false;
 		SOCKET tcpSocket = INVALID_SOCKET;
 		SOCKET udpSocket = INVALID_SOCKET;
 		SOCKADDR_IN6 address = { 0 };

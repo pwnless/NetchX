@@ -86,11 +86,71 @@ public static class DnsUtils
         InFlight.Clear();
     }
 
+    /// <summary>
+    ///     Normalizes an AioDNS upstream. AioDNS accepts TCP or DNS-over-TLS
+    ///     endpoints and requires an explicit port, including for IPv6 literals.
+    /// </summary>
     public static string AppendPort(string host, ushort port = 53)
     {
-        if (!host.Contains(':'))
-            return host + $":{port}";
+        if (!TryNormalizeDnsEndpoint(host, out var normalized, port))
+            throw new ArgumentException("DNS endpoint format invalid", nameof(host));
 
-        return host;
+        return normalized;
     }
+
+    public static bool TryNormalizeDnsEndpoint(string? value, out string normalized, ushort defaultPort = 53)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        value = value.Trim();
+        var scheme = "tcp";
+        Uri? uri;
+
+        if (value.Contains("://", StringComparison.Ordinal))
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out uri) ||
+                (!uri.Scheme.Equals("tcp", StringComparison.OrdinalIgnoreCase) &&
+                 !uri.Scheme.Equals("tls", StringComparison.OrdinalIgnoreCase)) ||
+                !string.IsNullOrEmpty(uri.UserInfo) ||
+                !string.IsNullOrEmpty(uri.Query) ||
+                !string.IsNullOrEmpty(uri.Fragment) ||
+                uri.AbsolutePath is not "" and not "/")
+                return false;
+
+            scheme = uri.Scheme.ToLowerInvariant();
+        }
+        else if (IPAddress.TryParse(value, out var address))
+        {
+            normalized = $"tcp://{FormatHost(address.ToString())}:{defaultPort}";
+            return true;
+        }
+        else if (!Uri.TryCreate("tcp://" + value, UriKind.Absolute, out uri) ||
+                 !string.IsNullOrEmpty(uri.UserInfo) ||
+                 !string.IsNullOrEmpty(uri.Query) ||
+                 !string.IsNullOrEmpty(uri.Fragment) ||
+                 uri.AbsolutePath is not "" and not "/")
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(uri.Host) || uri.Port is < -1 or > ushort.MaxValue)
+            return false;
+
+        var endpointPort = uri.IsDefaultPort ? defaultPort : uri.Port;
+        if (endpointPort == 0)
+            return false;
+
+        normalized = $"{scheme}://{FormatHost(uri.Host)}:{endpointPort}";
+        return true;
+    }
+
+    private static string FormatHost(string host)
+    {
+        return IPAddress.TryParse(host, out var address) && address.AddressFamily == AddressFamily.InterNetworkV6
+            ? $"[{address}]"
+            : host;
+    }
+
 }

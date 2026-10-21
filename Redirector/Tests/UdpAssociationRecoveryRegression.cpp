@@ -150,7 +150,7 @@ namespace
 	}
 }
 
-extern "C" NF_STATUS __cdecl TestUdpPostReceive(ENDPOINT_ID id, const unsigned char* remoteAddress, const char* buffer, int length, PNF_UDP_OPTIONS options)
+extern "C" NF_STATUS __cdecl nf_udpPostReceive(ENDPOINT_ID id, const unsigned char* remoteAddress, const char* buffer, int length, PNF_UDP_OPTIONS options)
 {
 	if (id != Endpoint || remoteAddress == NULL || buffer == NULL || length != 1 || options == NULL || options->optionsLength != 0)
 		return NF_STATUS_FAIL;
@@ -170,6 +170,43 @@ extern "C" NF_STATUS __cdecl TestUdpPostReceive(ENDPOINT_ID id, const unsigned c
 	}
 	receiveReady.notify_all();
 	return NF_STATUS_SUCCESS;
+}
+
+// EventHandler is normally linked against nfapi.dll. The standalone regression
+// supplies the small surface it reaches so it can run without the driver.
+extern "C" NF_STATUS __cdecl nf_tcpPostSend(ENDPOINT_ID, const char*, int)
+{
+	return NF_STATUS_SUCCESS;
+}
+
+extern "C" NF_STATUS __cdecl nf_tcpPostReceive(ENDPOINT_ID, const char*, int)
+{
+	return NF_STATUS_SUCCESS;
+}
+
+extern "C" NF_STATUS __cdecl nf_tcpDisableFiltering(ENDPOINT_ID)
+{
+	return NF_STATUS_SUCCESS;
+}
+
+extern "C" NF_STATUS __cdecl nf_udpPostSend(ENDPOINT_ID, const unsigned char*, const char*, int, PNF_UDP_OPTIONS)
+{
+	return NF_STATUS_SUCCESS;
+}
+
+extern "C" NF_STATUS __cdecl nf_udpDisableFiltering(ENDPOINT_ID)
+{
+	return NF_STATUS_SUCCESS;
+}
+
+extern "C" BOOL __cdecl nf_getProcessNameW(DWORD, wchar_t*, DWORD)
+{
+	return FALSE;
+}
+
+extern "C" BOOL __cdecl nf_getProcessNameFromKernel(DWORD, wchar_t*, DWORD)
+{
+	return FALSE;
 }
 
 int main()

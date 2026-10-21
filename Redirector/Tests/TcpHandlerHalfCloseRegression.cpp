@@ -9,6 +9,9 @@ extern wstring tgtPort;
 extern string tgtUsername;
 extern string tgtPassword;
 
+atomic_ullong UP = { 0 };
+atomic_ullong DL = { 0 };
+
 namespace
 {
 	bool ReceiveExact(SOCKET socket, char* buffer, int length)
@@ -33,6 +36,18 @@ namespace
 			sent += result;
 		}
 		return true;
+	}
+
+	bool WaitForCounters(ULONGLONG upload, ULONGLONG download)
+	{
+		const auto deadline = chrono::steady_clock::now() + chrono::seconds(3);
+		while (chrono::steady_clock::now() < deadline)
+		{
+			if (UP.load() == upload && DL.load() == download)
+				return true;
+			this_thread::sleep_for(chrono::milliseconds(5));
+		}
+		return UP.load() == upload && DL.load() == download;
 	}
 
 	SOCKET CreateLoopbackListener(USHORT& port)
@@ -148,7 +163,8 @@ int main()
 	const bool validResponse = received && memcmp(responsePayload, "response", sizeof(responsePayload) - 1) == 0;
 	const bool serverFinished = serverFuture.wait_for(chrono::seconds(3)) == future_status::ready;
 	const bool serverPassed = serverFinished && serverFuture.get();
-	passed = passed && connected && sent && clientHalfClosed && validResponse && serverPassed;
+	const bool countersPassed = WaitForCounters(sizeof(requestPayload) - 1, sizeof(responsePayload) - 1);
+	passed = passed && connected && sent && clientHalfClosed && validResponse && serverPassed && countersPassed;
 
 	TCPHandler::FREE();
 	if (client != INVALID_SOCKET)
@@ -157,8 +173,9 @@ int main()
 	closesocket(socksListener);
 	WSACleanup();
 
-	printf("TCP IOCP half-close regression: %s (connect=%s, send=%s, client FIN=%s, response=%s, server=%s)\n", passed ? "PASS" : "FAIL",
+	printf("TCP IOCP half-close regression: %s (connect=%s, send=%s, client FIN=%s, response=%s, server=%s, counters=%s)\n", passed ? "PASS" : "FAIL",
 		connected ? "PASS" : "FAIL", sent ? "PASS" : "FAIL", clientHalfClosed ? "PASS" : "FAIL",
-		validResponse ? "PASS" : "FAIL", serverPassed ? "PASS" : "FAIL");
+		validResponse ? "PASS" : "FAIL", serverPassed ? "PASS" : "FAIL", countersPassed ? "PASS" : "FAIL");
+	printf("TCP IOCP counters: UP=%llu, DL=%llu\n", static_cast<unsigned long long>(UP.load()), static_cast<unsigned long long>(DL.load()));
 	return passed ? 0 : 1;
 }

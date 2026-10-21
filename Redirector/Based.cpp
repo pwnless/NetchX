@@ -7,6 +7,7 @@ bool filterICMP = true;
 bool filterTCP = true;
 bool filterUDP = true;
 bool filterDNS = true;
+atomic_ullong handleRuleGeneration = { 0 };
 
 DWORD icmping = 0;
 

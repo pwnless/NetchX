@@ -45,6 +45,42 @@ jobs:
         shell: pwsh
         run: Add-Content -LiteralPath $env:GITHUB_PATH -Value 'C:\msys64\mingw64\bin'
 
+      - name: Configure AioDNS source-build toolchain
+        shell: pwsh
+        run: |
+          $go = (Get-Command go.exe -ErrorAction Stop).Source
+          $gcc = 'C:\msys64\mingw64\bin\gcc.exe'
+          if (-not (Test-Path -LiteralPath $gcc)) {
+            throw "Expected the MSYS2 MinGW-w64 GCC compiler at '$gcc'."
+          }
+
+          $goRoot = (& $go env GOROOT).Trim()
+          if ([string]::IsNullOrWhiteSpace($goRoot) -or -not (Test-Path -LiteralPath (Join-Path $goRoot 'bin\go.exe'))) {
+            throw "The configured Go installation '$go' did not report a usable GOROOT."
+          }
+
+          "NETCHX_GO_ROOT=$goRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CC=$gcc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CGO_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $go version
+          & $gcc --version
+
+      - name: Build and test NetchX AioDNS from source
+        shell: pwsh
+        run: |
+          # Other/aiodns/build.ps1 performs go mod download, go test, and the
+          # CGO shared-library build. It has no prebuilt-binary fallback.
+          & .\Other\aiodns\build.ps1
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $aiodns = Get-Item -LiteralPath .\Other\release\aiodns.bin -ErrorAction Stop
+          if ($aiodns.Length -eq 0) {
+            throw 'The source-built AioDNS binary is empty.'
+          }
+          Write-Host "Source-built AioDNS: $($aiodns.FullName) ($($aiodns.Length) bytes)"
+
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
 

@@ -73,13 +73,13 @@ public static class NetworkInterfaceExtension
         void VerifyDns(ref string s)
         {
             s = s.Trim();
-            if (primaryDns.IsNullOrEmpty())
-                throw new ArgumentException("DNS format invalid", nameof(primaryDns));
+            if (s.IsNullOrEmpty())
+                throw new ArgumentException("DNS format invalid", nameof(s));
         }
 
         VerifyDns(ref primaryDns);
         if (secondDns != null)
-            VerifyDns(ref primaryDns);
+            VerifyDns(ref secondDns);
 
         var wmi = new ManagementClass("Win32_NetworkAdapterConfiguration");
         var mos = wmi.GetInstances().Cast<ManagementObject>();

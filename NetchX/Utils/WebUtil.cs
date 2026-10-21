@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-using Microsoft.VisualStudio.Threading;
 
 namespace NetchX.Utils;
 
@@ -9,92 +8,95 @@ public static class WebUtil
     public const string DefaultUserAgent =
         @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36 Edg/94.0.992.31";
 
-    static WebUtil()
-    {
-        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-    }
+    private static readonly HttpClient SharedClient = CreateClient();
 
     private static int DefaultGetTimeout => Global.Settings.RequestTimeout;
 
-    public static HttpWebRequest CreateRequest(string url, int? timeout = null, string? userAgent = null)
+    public static async Task<byte[]> DownloadBytesAsync(string address, string? userAgent = null, int? timeout = null)
     {
-        var req = (HttpWebRequest)WebRequest.Create(url);
-        req.UserAgent = string.IsNullOrWhiteSpace(userAgent) ? DefaultUserAgent : userAgent;
-        req.Accept = "*/*";
-        req.KeepAlive = true;
-        req.Timeout = timeout ?? DefaultGetTimeout;
-        req.ReadWriteTimeout = timeout ?? DefaultGetTimeout;
-        req.Headers.Add("Accept-Charset", "utf-8");
-        return req;
+        using var request = CreateRequest(address, userAgent);
+        using var cancellation = CreateTimeoutCancellation(timeout);
+        using var response = await SharedClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellation.Token);
+        return await response.Content.ReadAsByteArrayAsync(cancellation.Token);
     }
 
-    public static async Task<byte[]> DownloadBytesAsync(HttpWebRequest req)
+    public static async Task<(HttpStatusCode, string)> DownloadStringAsync(
+        string address,
+        Encoding? encoding = null,
+        string? userAgent = null,
+        string? proxyServer = null,
+        int? timeout = null)
     {
-        using var webResponse = await req.GetResponseAsync();
-        var memoryStream = new MemoryStream();
-        await using (memoryStream)
+        using var request = CreateRequest(address, userAgent);
+        using var cancellation = CreateTimeoutCancellation(timeout);
+        using var client = string.IsNullOrWhiteSpace(proxyServer) ? null : CreateClient(proxyServer);
+        using var response = await (client ?? SharedClient).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellation.Token);
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellation.Token);
+        return (response.StatusCode, (encoding ?? Encoding.UTF8).GetString(bytes));
+    }
+
+    public static async Task DownloadFileAsync(string address, string fileFullPath, IProgress<int>? progress = null, int? timeout = null)
+    {
+        using var request = CreateRequest(address, userAgent: null);
+        using var cancellation = CreateTimeoutCancellation(timeout);
+        using var response = await SharedClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellation.Token);
+        response.EnsureSuccessStatusCode();
+
+        var total = response.Content.Headers.ContentLength;
+        var buffer = new byte[81920];
+        long written = 0;
+        var lastProgress = -1;
+
+        await using var input = await response.Content.ReadAsStreamAsync(cancellation.Token);
+        await using var output = new FileStream(fileFullPath, FileMode.Create, FileAccess.Write, FileShare.None, buffer.Length, useAsync: true);
+        while (true)
         {
-            var input = webResponse.GetResponseStream();
-            await using (input)
+            var read = await input.ReadAsync(buffer, cancellation.Token);
+            if (read == 0)
+                break;
+
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellation.Token);
+            written += read;
+            if (total is > 0)
             {
-                await input.CopyToAsync(memoryStream);
-                return memoryStream.ToArray();
-            }
-        }
-    }
-
-    public static async Task<(HttpStatusCode, string)> DownloadStringAsync(HttpWebRequest req, Encoding? encoding = null)
-    {
-        encoding ??= Encoding.UTF8;
-        using var webResponse = (HttpWebResponse)await req.GetResponseAsync();
-
-        var responseStream = webResponse.GetResponseStream();
-        await using (responseStream)
-        {
-            using var streamReader = new StreamReader(responseStream, encoding);
-
-            return (webResponse.StatusCode, await streamReader.ReadToEndAsync());
-        }
-    }
-
-    public static Task DownloadFileAsync(string address, string fileFullPath, IProgress<int>? progress = null)
-    {
-        return DownloadFileAsync(CreateRequest(address), fileFullPath, progress);
-    }
-
-    public static async Task DownloadFileAsync(HttpWebRequest req, string fileFullPath, IProgress<int>? progress)
-    {
-        var fileStream = new FileStream(fileFullPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
-        await using (fileStream)
-        {
-            using var webResponse = (HttpWebResponse)await req.GetResponseAsync();
-            var input = webResponse.GetResponseStream();
-            await using (input)
-            {
-                using var downloadTask = input.CopyToAsync(fileStream);
-                if (progress != null)
-                    ReportProgressAsync(webResponse.ContentLength, downloadTask, fileStream, progress, 200).Forget();
-
-                await downloadTask;
+                var currentProgress = (int)Math.Min(99, written * 100 / total.Value);
+                if (currentProgress != lastProgress)
+                {
+                    lastProgress = currentProgress;
+                    progress?.Report(currentProgress);
+                }
             }
         }
 
         progress?.Report(100);
     }
 
-    private static async Task ReportProgressAsync(long total, IAsyncResult downloadTask, Stream stream, IProgress<int> progress, int interval)
+    private static HttpRequestMessage CreateRequest(string address, string? userAgent)
     {
-        var n = 0;
-        while (!downloadTask.IsCompleted)
-        {
-            var n1 = (int)((double)stream.Length / total * 100);
-            if (n != n1)
-            {
-                n = n1;
-                progress.Report(n);
-            }
+        var request = new HttpRequestMessage(HttpMethod.Get, address);
+        request.Headers.TryAddWithoutValidation("User-Agent", string.IsNullOrWhiteSpace(userAgent) ? DefaultUserAgent : userAgent);
+        request.Headers.TryAddWithoutValidation("Accept", "*/*");
+        request.Headers.TryAddWithoutValidation("Accept-Charset", "utf-8");
+        return request;
+    }
 
-            await Task.Delay(interval);
+    private static CancellationTokenSource CreateTimeoutCancellation(int? timeout)
+    {
+        var milliseconds = timeout ?? DefaultGetTimeout;
+        return milliseconds > 0
+            ? new CancellationTokenSource(TimeSpan.FromMilliseconds(milliseconds))
+            : new CancellationTokenSource();
+    }
+
+    private static HttpClient CreateClient(string? proxyServer = null)
+    {
+        var handler = new SocketsHttpHandler();
+        if (!string.IsNullOrWhiteSpace(proxyServer))
+        {
+            handler.UseProxy = true;
+            handler.Proxy = new WebProxy(proxyServer);
         }
+
+        return new HttpClient(handler, disposeHandler: true);
     }
 }

@@ -15,6 +15,7 @@ extern bool dnsOnly;
 extern vector<wregex> bypassList;
 extern vector<wregex> handleList;
 extern shared_mutex ruleLock;
+extern atomic_ullong handleRuleGeneration;
 extern atomic_ushort tcpListen;
 DWORD CurrentID = 0;
 
@@ -37,6 +38,8 @@ namespace
 	constexpr size_t MaxUdpOptionBytes = 4096;
 	constexpr size_t UdpOptionsHeaderLength = offsetof(NF_UDP_OPTIONS, options);
 	constexpr size_t MaxUdpReceiveWorkers = 16;
+	constexpr size_t MaxParentProcessCacheEntries = 4096;
+	constexpr auto ParentProcessCacheLifetime = chrono::seconds(5);
 
 	enum class UdpAssociationState
 	{
@@ -85,6 +88,85 @@ namespace
 		vector<char> buffer;
 	};
 
+	struct UdpControlOperation
+	{
+		explicit UdpControlOperation(shared_ptr<SocksHelper::UDP> valueRemote)
+			: remote(move(valueRemote)), buffer(256)
+		{
+			wsabuf.buf = buffer.data();
+			wsabuf.len = static_cast<ULONG>(buffer.size());
+		}
+
+		OVERLAPPED overlapped{};
+		WSABUF wsabuf{};
+		shared_ptr<SocksHelper::UDP> remote;
+		vector<char> buffer;
+	};
+
+	struct ParentProcessCacheEntry
+	{
+		ULONGLONG processCreationTime = 0;
+		ULONGLONG ruleGeneration = 0;
+		bool matches = false;
+		chrono::steady_clock::time_point expiresAt;
+	};
+
+	mutex parentProcessCacheLock;
+	map<DWORD, ParentProcessCacheEntry> parentProcessCache;
+
+	bool TryGetProcessCreationTime(DWORD id, ULONGLONG& creationTime)
+	{
+		const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, id);
+		if (process == NULL)
+			return false;
+
+		FILETIME creation{};
+		FILETIME exit{};
+		FILETIME kernel{};
+		FILETIME user{};
+		const BOOL success = GetProcessTimes(process, &creation, &exit, &kernel, &user);
+		CloseHandle(process);
+		if (!success)
+			return false;
+
+		creationTime = (static_cast<ULONGLONG>(creation.dwHighDateTime) << 32) | creation.dwLowDateTime;
+		return true;
+	}
+
+	bool TryGetParentProcessCache(DWORD id, ULONGLONG processCreationTime, ULONGLONG ruleGeneration, bool& matches)
+	{
+		lock_guard<mutex> lock(parentProcessCacheLock);
+		const auto it = parentProcessCache.find(id);
+		if (it == parentProcessCache.end() ||
+			it->second.processCreationTime != processCreationTime ||
+			it->second.ruleGeneration != ruleGeneration ||
+			it->second.expiresAt <= chrono::steady_clock::now())
+			return false;
+
+		matches = it->second.matches;
+		return true;
+	}
+
+	void CacheParentProcessMatch(DWORD id, ULONGLONG processCreationTime, ULONGLONG ruleGeneration, bool matches)
+	{
+		lock_guard<mutex> lock(parentProcessCacheLock);
+		const auto now = chrono::steady_clock::now();
+		if (parentProcessCache.size() >= MaxParentProcessCacheEntries)
+		{
+			for (auto it = parentProcessCache.begin(); it != parentProcessCache.end();)
+			{
+				if (it->second.expiresAt <= now || it->second.ruleGeneration != ruleGeneration)
+					it = parentProcessCache.erase(it);
+				else
+					++it;
+			}
+			if (parentProcessCache.size() >= MaxParentProcessCacheEntries)
+				parentProcessCache.erase(parentProcessCache.begin());
+		}
+
+		parentProcessCache[id] = { processCreationTime, ruleGeneration, matches, now + ParentProcessCacheLifetime };
+	}
+
 	mutex udpContextLock;
 	map<ENDPOINT_ID, shared_ptr<UdpContext>> udpContext;
 
@@ -102,6 +184,13 @@ namespace
 	map<LPOVERLAPPED, shared_ptr<UdpReceiveOperation>> udpReceiveOperations;
 	vector<thread> udpReceiveWorkers;
 	atomic_bool udpReceiveStopping = true;
+
+	HANDLE udpControlPort = NULL;
+	mutex udpControlLock;
+	condition_variable udpControlDrained;
+	map<LPOVERLAPPED, shared_ptr<UdpControlOperation>> udpControlOperations;
+	vector<thread> udpControlWorkers;
+	atomic_bool udpControlStopping = true;
 
 	bool ReserveUdpQueueBudget(size_t bytes)
 	{
@@ -149,6 +238,9 @@ namespace
 	bool StartUdpReceiver(const shared_ptr<UdpContext>& context, const shared_ptr<SocksHelper::UDP>& remote, const vector<char>& options);
 	bool StartUdpReceiveWorkers();
 	void StopUdpReceiveWorkers();
+	bool StartUdpControlMonitor(const shared_ptr<SocksHelper::UDP>& remote);
+	bool StartUdpControlWorkers();
+	void StopUdpControlWorkers();
 
 	bool CopyUdpTarget(const unsigned char* source, SOCKADDR_IN6& target)
 	{
@@ -245,6 +337,12 @@ namespace
 				return;
 			}
 			context->state = ready ? UdpAssociationState::Ready : UdpAssociationState::Failed;
+		}
+
+		if (ready && remote->TryStartControlMonitor() && !StartUdpControlMonitor(remote))
+		{
+			remote->Stop();
+			ready = false;
 		}
 
 		bool receiverStarted = false;
@@ -475,6 +573,119 @@ namespace
 		CloseHandle(udpReceivePort);
 		udpReceivePort = NULL;
 	}
+
+	void RetireUdpControlOperation(const shared_ptr<UdpControlOperation>& operation)
+	{
+		{
+			lock_guard<mutex> lock(udpControlLock);
+			auto it = udpControlOperations.find(&operation->overlapped);
+			if (it != udpControlOperations.end() && it->second == operation)
+				udpControlOperations.erase(it);
+		}
+		operation->remote->ResetControlMonitor();
+		udpControlDrained.notify_all();
+	}
+
+	bool PostUdpControlReceive(const shared_ptr<UdpControlOperation>& operation)
+	{
+		if (eventStopping || udpControlStopping)
+			return false;
+
+		ZeroMemory(&operation->overlapped, sizeof(operation->overlapped));
+		operation->wsabuf.buf = operation->buffer.data();
+		operation->wsabuf.len = static_cast<ULONG>(operation->buffer.size());
+		return operation->remote->BeginControlReceive(&operation->wsabuf, &operation->overlapped);
+	}
+
+	void ProcessUdpControlCompletion(const shared_ptr<UdpControlOperation>& operation, bool completed, DWORD transferred)
+	{
+		// The SOCKS UDP ASSOCIATE TCP connection is a lifetime control channel,
+		// not an echo protocol. Discard unexpected bytes but retire the
+		// association when the peer closes it or an I/O error occurs.
+		if (completed && transferred > 0 && !eventStopping && PostUdpControlReceive(operation))
+			return;
+
+		operation->remote->Stop();
+		RetireUdpControlOperation(operation);
+	}
+
+	void UdpControlWorker()
+	{
+		while (true)
+		{
+			DWORD transferred = 0;
+			ULONG_PTR completionKey = 0;
+			LPOVERLAPPED overlapped = NULL;
+			const BOOL completed = GetQueuedCompletionStatus(udpControlPort, &transferred, &completionKey, &overlapped, INFINITE);
+			UNREFERENCED_PARAMETER(completionKey);
+			if (overlapped == NULL)
+			{
+				if (udpControlStopping)
+					return;
+				continue;
+			}
+
+			shared_ptr<UdpControlOperation> operation;
+			{
+				lock_guard<mutex> lock(udpControlLock);
+				auto it = udpControlOperations.find(overlapped);
+				if (it != udpControlOperations.end())
+					operation = it->second;
+			}
+			if (operation)
+				ProcessUdpControlCompletion(operation, completed == TRUE, transferred);
+		}
+	}
+
+	bool StartUdpControlWorkers()
+	{
+		udpControlPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
+		if (udpControlPort == NULL)
+			return false;
+
+		udpControlStopping = false;
+		try
+		{
+			udpControlWorkers.reserve(GetUdpReceiveWorkerCount());
+			for (size_t i = 0; i < GetUdpReceiveWorkerCount(); ++i)
+				udpControlWorkers.emplace_back(UdpControlWorker);
+		}
+		catch (...)
+		{
+			udpControlStopping = true;
+			for (size_t i = 0; i < udpControlWorkers.size(); ++i)
+				PostQueuedCompletionStatus(udpControlPort, 0, 0, NULL);
+			for (auto& worker : udpControlWorkers)
+				if (worker.joinable())
+					worker.join();
+			udpControlWorkers.clear();
+			CloseHandle(udpControlPort);
+			udpControlPort = NULL;
+			return false;
+		}
+
+		return true;
+	}
+
+	void StopUdpControlWorkers()
+	{
+		if (udpControlPort == NULL)
+			return;
+
+		udpControlStopping = true;
+		{
+			unique_lock<mutex> lock(udpControlLock);
+			udpControlDrained.wait(lock, [] { return udpControlOperations.empty(); });
+		}
+		for (size_t i = 0; i < udpControlWorkers.size(); ++i)
+			PostQueuedCompletionStatus(udpControlPort, 0, 0, NULL);
+		for (auto& worker : udpControlWorkers)
+			if (worker.joinable())
+				worker.join();
+		udpControlWorkers.clear();
+		CloseHandle(udpControlPort);
+		udpControlPort = NULL;
+	}
 }
 
 #if defined(_DEBUG)
@@ -559,15 +770,20 @@ bool checkHandleName(DWORD id, const wstring& name)
 
 	if (filterParent)
 	{
+		const ULONGLONG ruleGeneration = handleRuleGeneration.load(memory_order_relaxed);
+		ULONGLONG processCreationTime = 0;
+		bool matches = false;
+		if (TryGetProcessCreationTime(id, processCreationTime) &&
+			TryGetParentProcessCache(id, processCreationTime, ruleGeneration, matches))
+			return matches;
+
 		PROCESSENTRY32W PE;
 		memset(&PE, 0, sizeof(PROCESSENTRY32W));
 		PE.dwSize = sizeof(PROCESSENTRY32W);
 
 		auto hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 		if (hSnapshot == INVALID_HANDLE_VALUE)
-		{
 			return false;
-		}
 
 		if (!Process32FirstW(hSnapshot, &PE))
 		{
@@ -576,22 +792,25 @@ bool checkHandleName(DWORD id, const wstring& name)
 		}
 
 		do {
-			if (PE.th32ProcessID == id)
-			{
-				auto parentName = GetProcessName(PE.th32ParentProcessID);
+			if (PE.th32ProcessID != id)
+				continue;
 
-				for (const auto& rule : handleList)
+			auto parentName = GetProcessName(PE.th32ParentProcessID);
+			for (const auto& rule : handleList)
+			{
+				if (regex_search(parentName, rule))
 				{
-					if (regex_search(parentName, rule))
-					{
-						CloseHandle(hSnapshot);
-						return true;
-					}
+					matches = true;
+					break;
 				}
 			}
+			break;
 		} while (Process32NextW(hSnapshot, &PE));
 
 		CloseHandle(hSnapshot);
+		if (processCreationTime != 0)
+			CacheParentProcessMatch(id, processCreationTime, ruleGeneration, matches);
+		return matches;
 	}
 
 	return false;
@@ -624,6 +843,14 @@ bool eh_init()
 		DNSHandler::FREE();
 		return false;
 	}
+	if (!StartUdpControlWorkers())
+	{
+		StopUdpReceiveWorkers();
+		StopUdpDispatchWorkers();
+		TCPHandler::FREE();
+		DNSHandler::FREE();
+		return false;
+	}
 
 	return true;
 }
@@ -651,6 +878,7 @@ void eh_free()
 
 	StopUdpDispatchWorkers();
 	StopUdpReceiveWorkers();
+	StopUdpControlWorkers();
 
 	UP = 0;
 	DL = 0;
@@ -668,6 +896,39 @@ void threadEnd()
 
 namespace
 {
+	bool StartUdpControlMonitor(const shared_ptr<SocksHelper::UDP>& remote)
+	{
+		try
+		{
+			if (eventStopping || udpControlStopping || !remote->AssociateControlReceivePort(udpControlPort))
+			{
+				remote->ResetControlMonitor();
+				return false;
+			}
+
+			auto operation = make_shared<UdpControlOperation>(remote);
+			{
+				lock_guard<mutex> lock(udpControlLock);
+				if (udpControlStopping)
+				{
+					remote->ResetControlMonitor();
+					return false;
+				}
+				udpControlOperations.emplace(&operation->overlapped, operation);
+			}
+			if (PostUdpControlReceive(operation))
+				return true;
+
+			RetireUdpControlOperation(operation);
+			return false;
+		}
+		catch (...)
+		{
+			remote->ResetControlMonitor();
+			return false;
+		}
+	}
+
 	bool StartUdpReceiver(const shared_ptr<UdpContext>& context, const shared_ptr<SocksHelper::UDP>& remote, const vector<char>& options)
 	{
 		try

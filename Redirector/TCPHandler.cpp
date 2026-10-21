@@ -2,6 +2,9 @@
 
 #include <array>
 
+extern atomic_ullong UP;
+extern atomic_ullong DL;
+
 SOCKET tcpSocket = INVALID_SOCKET;
 atomic_ushort tcpListen = 0;
 
@@ -39,6 +42,7 @@ namespace
 		DWORD offset = 0;
 		DWORD length = 0;
 		atomic_bool finished = false;
+		bool countAsUpload = false;
 	};
 
 	struct TcpSession : enable_shared_from_this<TcpSession>
@@ -231,6 +235,11 @@ namespace
 			AbortPump(pump);
 			return;
 		}
+		if (pump->countAsUpload)
+			UP += transferred;
+		else
+			DL += transferred;
+
 		pump->offset += transferred;
 		if (pump->offset == pump->length)
 			PostReceive(pump);
@@ -380,9 +389,11 @@ namespace
 		session->toRemote.session = session.get();
 		session->toRemote.source = client;
 		session->toRemote.destination = remoteSocket;
+		session->toRemote.countAsUpload = true;
 		session->toClient.session = session.get();
 		session->toClient.source = remoteSocket;
 		session->toClient.destination = client;
+		session->toClient.countAsUpload = false;
 		PostReceive(&session->toRemote);
 		PostReceive(&session->toClient);
 		return true;

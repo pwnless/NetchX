@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using NetchX.Controllers;
 
 // General assembly information is controlled by the following attributes.
@@ -18,6 +19,7 @@ using NetchX.Controllers;
 // Setting ComVisible to false makes the types in this assembly invisible to COM.
 // Set the ComVisible attribute to true if a type must be accessed from COM.
 [assembly: ComVisible(false)]
+[assembly: InternalsVisibleTo("Tests")]
 
 // The following GUID is the type library ID if this project is exposed to COM.
 [assembly: Guid("4b041b91-5790-4571-8c58-c63ffe4bc9f8")]
@@ -33,5 +35,5 @@ using NetchX.Controllers;
 // automatically by using "*", as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
 [assembly: AssemblyVersion(UpdateChecker.AssemblyVersion)]
-[assembly: AssemblyFileVersion("2.0.3.0")]
-[assembly: AssemblyInformationalVersion("2.0.3")]
+[assembly: AssemblyFileVersion("2.0.4.0")]
+[assembly: AssemblyInformationalVersion("2.0.4")]

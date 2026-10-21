@@ -85,24 +85,20 @@ public static class StringExtension
         // https://github.com/XTLS/Xray-core/discussions/715
         // https://xray-uuid.ducksoft.site/
 
-        SHA1 sha1 = new SHA1CryptoServiceProvider();
-
         // example string: "example"
-        List<byte> byteSource = new List<byte>();
-        byteSource.AddRange(new byte[16]);
-        byteSource.AddRange(Encoding.UTF8.GetBytes(str));
+        var byteSource = new byte[16 + Encoding.UTF8.GetByteCount(str)];
+        Encoding.UTF8.GetBytes(str, byteSource.AsSpan(16));
 
-        byte[] Sha1Bytes = sha1.ComputeHash(byteSource.ToArray()).Skip(0).Take(16).ToArray();
-        sha1.Dispose();
+        var sha1Bytes = SHA1.HashData(byteSource)[..16];
 
         //UUIDv5: [254 181 68 49 48 27 82 187 166 221 225 233 62 129 187 158]
 
-        Sha1Bytes[6] = (byte)((Sha1Bytes[6] & 0x0f) | (5 << 4));
-        Sha1Bytes[8] = (byte)(Sha1Bytes[8] & (0xff >> 2) | (0x02 << 6));
+        sha1Bytes[6] = (byte)((sha1Bytes[6] & 0x0f) | (5 << 4));
+        sha1Bytes[8] = (byte)(sha1Bytes[8] & (0xff >> 2) | (0x02 << 6));
 
-        return BitConverter.ToString(Sha1Bytes).Replace("-", "")
+        return Convert.ToHexString(sha1Bytes)
             .Insert(8, "-").Insert(13, "-").Insert(18, "-").Insert(23, "-")
-            .ToLower();
+            .ToLowerInvariant();
         //UUIDv5: feb54431-301b-52bb-a6dd-e1e93e81bb9e
     }
 }

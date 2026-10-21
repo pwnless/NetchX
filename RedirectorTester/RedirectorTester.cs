@@ -133,6 +133,11 @@ namespace RedirectorTester
 				if (Volatile.Read(ref socksUdpAssociations) != 1)
 					throw new InvalidOperationException("UDP traffic did not reach the local SOCKS5 server.");
 
+				var uploadCounter = aio_getUP();
+				var downloadCounter = aio_getDL();
+				if (uploadCounter == 0 || downloadCounter < (ulong)totalBytes)
+					throw new InvalidOperationException($"Redirector counters did not record the forwarded TCP payload. UP={uploadCounter}, DL={downloadCounter}, expected DL at least {totalBytes}.");
+
 				var directMegabitsPerSecond = directBytes * 8d / directStopwatch.Elapsed.TotalSeconds / 1_000_000d;
                 var megabitsPerSecond = totalBytes * 8d / stopwatch.Elapsed.TotalSeconds / 1_000_000d;
 				Console.WriteLine("Parallel baseline ({0} connections): {1:N2} MiB per direction in {2:N3}s ({3:N2} Mbit/s per direction, {4:N2} Mbit/s aggregate) through local SOCKS5 without Redirector.",
@@ -149,8 +154,8 @@ namespace RedirectorTester
 					megabitsPerSecond * 2,
                     socksConnectRequests,
 					socksUdpAssociations,
-                    aio_getUP(),
-                    aio_getDL());
+                    uploadCounter,
+                    downloadCounter);
                 return 0;
             }
             catch (Exception exception)

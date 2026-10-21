@@ -26,6 +26,7 @@ extern string tgtPassword;
 extern vector<wregex> bypassList;
 extern vector<wregex> handleList;
 extern shared_mutex ruleLock;
+extern atomic_ullong handleRuleGeneration;
 
 extern atomic_ullong UP;
 extern atomic_ullong DL;
@@ -161,6 +162,7 @@ extern "C" {
 			unique_lock<shared_mutex> lock(ruleLock);
 			bypassList.clear();
 			handleList.clear();
+			handleRuleGeneration.fetch_add(1, memory_order_relaxed);
 			break;
 		}
 		case AIO_BYPNAME:
@@ -180,6 +182,7 @@ extern "C" {
 				std::wregex checker(value);
 				unique_lock<shared_mutex> lock(ruleLock);
 				handleList.emplace_back(move(checker));
+			handleRuleGeneration.fetch_add(1, memory_order_relaxed);
 			}
 			catch (regex_error) {
 				return FALSE;

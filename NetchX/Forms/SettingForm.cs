@@ -176,9 +176,15 @@ public partial class SettingForm : BindingForm
 
         #region AioDNS
 
-        BindTextBox(ChinaDNSTextBox, _ => true, s => Global.Settings.AioDNS.ChinaDNS = s, Global.Settings.AioDNS.ChinaDNS);
+        BindTextBox(ChinaDNSTextBox,
+            s => DnsUtils.TryNormalizeDnsEndpoint(s, out _),
+            s => Global.Settings.AioDNS.ChinaDNS = DnsUtils.AppendPort(s),
+            Global.Settings.AioDNS.ChinaDNS);
 
-        BindTextBox(OtherDNSTextBox, _ => true, s => Global.Settings.AioDNS.OtherDNS = s, Global.Settings.AioDNS.OtherDNS);
+        BindTextBox(OtherDNSTextBox,
+            s => DnsUtils.TryNormalizeDnsEndpoint(s, out _),
+            s => Global.Settings.AioDNS.OtherDNS = DnsUtils.AppendPort(s),
+            Global.Settings.AioDNS.OtherDNS);
 
         BindTextBox(AioDNSListenPortTextBox,
             s => ushort.TryParse(s, out _),

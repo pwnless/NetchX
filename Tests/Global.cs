@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.IO;
@@ -9,8 +10,10 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NetchX.Controllers;
+using NetchX.Interfaces;
 using NetchX.Models.GitHubRelease;
 using NetchX.Models;
+using NetchX.Models.Modes;
 using NetchX.Servers;
 using NetchX.Utils;
 
@@ -28,6 +31,33 @@ public class Global
         hash[8] = (byte)((hash[8] & 0x3f) | 0x80);
 
         Assert.AreEqual("3144b5fe-1b30-bb52-a6dd-e1e93e81bb9e", new Guid(hash).ToString());
+    }
+
+    [TestMethod]
+    public void AioDnsEndpointsAreNormalizedAndValidated()
+    {
+        Assert.AreEqual("tcp://1.1.1.1:53", DnsUtils.AppendPort("1.1.1.1"));
+        Assert.AreEqual("tcp://dns.example.test:5353", DnsUtils.AppendPort(" dns.example.test:5353 "));
+        Assert.AreEqual("tcp://[2606:4700:4700::1111]:53", DnsUtils.AppendPort("2606:4700:4700::1111"));
+        Assert.AreEqual("tls://[2606:4700:4700::1111]:853", DnsUtils.AppendPort("tls://[2606:4700:4700::1111]:853"));
+        Assert.AreEqual("tcp://1.1.1.1:53", DnsUtils.AppendPort("tcp://1.1.1.1"));
+
+        Assert.IsFalse(DnsUtils.TryNormalizeDnsEndpoint("https://dns.example.test", out _));
+        Assert.IsFalse(DnsUtils.TryNormalizeDnsEndpoint("tcp://dns.example.test/path", out _));
+        Assert.IsFalse(DnsUtils.TryNormalizeDnsEndpoint("tcp://dns.example.test:0", out _));
+        Assert.IsFalse(DnsUtils.TryNormalizeDnsEndpoint("", out _));
+    }
+
+    [TestMethod]
+    public async Task MainControllerStopsModeBeforeServerAndStillCleansUpAfterFailureAsync()
+    {
+        var order = new List<string>();
+        var mode = new RecordingModeController(order, throwOnStop: true);
+        var server = new RecordingServerController(order);
+
+        await MainController.StopControllersAsync(server, mode);
+
+        CollectionAssert.AreEqual(new[] { "mode", "server" }, order);
     }
 
     [TestMethod]
@@ -443,4 +473,36 @@ public class Global
         return null;
     }
 
+
+    private sealed class RecordingModeController(List<string> order, bool throwOnStop = false) : IModeController
+    {
+        public string Name => "recording mode";
+
+        public ModeFeature Features => default;
+
+        public Task StartAsync(Socks5Server server, Mode mode) => Task.CompletedTask;
+
+        public Task StopAsync()
+        {
+            order.Add("mode");
+            return throwOnStop ? Task.FromException(new InvalidOperationException("mode stop failure")) : Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingServerController(List<string> order) : IServerController
+    {
+        public string Name => "recording server";
+
+        public ushort? Socks5LocalPort { get; set; }
+
+        public string LocalAddress { get; set; } = string.Empty;
+
+        public Task<Socks5Server> StartAsync(Server server) => throw new NotSupportedException();
+
+        public Task StopAsync()
+        {
+            order.Add("server");
+            return Task.CompletedTask;
+        }
+    }
 }

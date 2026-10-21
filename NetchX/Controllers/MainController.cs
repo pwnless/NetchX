@@ -150,21 +150,14 @@ public static class MainController
         Log.Information("Stop Main Controller");
         StatusPortInfoText.Reset();
 
-        var tasks = new[]
-        {
-            ServerController?.StopAsync() ?? Task.CompletedTask,
-            ModeController?.StopAsync() ?? Task.CompletedTask
-        };
-
         try
         {
-            await Task.WhenAll(tasks);
+            // The mode owns the traffic interception path and the local SOCKS
+            // client connections. Tear it down before terminating Xray or
+            // sing-box so it cannot forward a new flow to an already-dead
+            // local proxy listener.
+            await StopControllersAsync(ServerController, ModeController);
         }
-        catch (Exception e)
-        {
-            Log.Error(e, "MainController Stop Error");
-        }
-
         finally
         {
             ServerController = null;
@@ -172,6 +165,29 @@ public static class MainController
             Socks5Server = null;
             Server = null;
             Mode = null;
+        }
+    }
+
+    internal static async Task StopControllersAsync(IServerController? serverController, IModeController? modeController)
+    {
+        try
+        {
+            if (modeController != null)
+                await modeController.StopAsync();
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "MainController Mode Stop Error");
+        }
+
+        try
+        {
+            if (serverController != null)
+                await serverController.StopAsync();
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "MainController Server Stop Error");
         }
     }
 
