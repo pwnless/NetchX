@@ -19,7 +19,7 @@
   <a href="#whats-new-since-197">1.9.7 → 2.0.0</a>
 </p>
 
-> The current release line is **2.0.4**. It retains NetchX's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
+> The current release line is **2.0.5**. It retains NetchX's core proxy behavior while modernizing the runtime, high-DPI UI, native forwarding reliability, and concurrent data plane.
 
 ## What's new since 1.9.7
 
@@ -74,13 +74,13 @@ Xray-core remains the bundled runtime for SOCKS5, Shadowsocks, Trojan, VMess, VL
 
 ### Modern Xray transports
 
-VLESS and VMess editors expose Xray's current `raw`, `xhttp`, `mkcp`, `grpc`, `websocket`, `httpupgrade`, and `hysteria` transports. VLESS also exposes the XTLS Vision flows. REALITY profiles require a server name, public key, fingerprint, and optional short ID and SpiderX; Xray permits REALITY only with RAW, XHTTP, or gRPC. Vision requires VLESS over RAW with TLS or REALITY.
+VLESS and VMess editors emit Xray's current `network` transport field for `raw`, `xhttp`, `mkcp`, `grpc`, `websocket`, `httpupgrade`, and `hysteria`. Imported VLESS/VMess links preserve XHTTP `extra` settings, TLS ALPN, and TLS ECH configuration. VLESS also exposes the XTLS Vision flows. REALITY profiles require a server name, public key, fingerprint, and optional short ID and SpiderX; Xray permits REALITY only with RAW, XHTTP, or gRPC. Vision normally requires VLESS over RAW with TLS or REALITY; current Xray also supports it over current transports when VLESS Encryption is configured.
 
 Saved profiles using `tcp`, `kcp`, or `ws` are mapped to Xray's current transport names. Legacy HTTP/2, QUIC, and standalone `xtls` security have been removed by Xray-core, so NetchX asks users to migrate those profiles to XHTTP, Hysteria, or TLS/REALITY with Vision as appropriate.
 
 ## Quick start
 
-1. Download `NetchX-2.0.4-win-x64.7z` from [Releases](https://github.com/pwnless/NetchX/releases), or the `.zip` fallback when 7-Zip packaging was unavailable.
+1. Download `NetchX-2.0.5-win-x64.7z` from [Releases](https://github.com/pwnless/NetchX/releases), or the `.zip` fallback when 7-Zip packaging was unavailable.
 2. **Extract the entire archive** to a writable directory. `bin`, `i18n`, and `mode` alongside `NetchX.exe` are required at runtime.
 3. Run `NetchX.exe` as an administrator, add or import a server, select a mode, and start it.
 

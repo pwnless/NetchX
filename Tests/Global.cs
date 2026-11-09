@@ -196,9 +196,9 @@ public class Global
         var streamSettings = outbound.GetProperty("streamSettings");
         var realitySettings = streamSettings.GetProperty("realitySettings");
 
-        Assert.AreEqual("raw", streamSettings.GetProperty("method").GetString());
+        Assert.AreEqual("raw", streamSettings.GetProperty("network").GetString());
+        Assert.IsFalse(streamSettings.TryGetProperty("method", out _));
         Assert.AreEqual("reality", streamSettings.GetProperty("security").GetString());
-        Assert.IsFalse(streamSettings.TryGetProperty("network", out _));
         Assert.IsTrue(streamSettings.TryGetProperty("rawSettings", out _));
         Assert.AreEqual(server.RealityPublicKey, realitySettings.GetProperty("password").GetString());
         Assert.AreEqual(server.RealityShortId, realitySettings.GetProperty("shortId").GetString());
@@ -246,6 +246,65 @@ public class Global
     }
 
     [TestMethod]
+    public async Task VlessEncryptedXhttpLinkPreservesExtraTlsAndVisionFieldsAsync()
+    {
+        const string link = "vless://b831381d-6324-4d53-ad4f-8cda48b30811@127.0.0.1:443?encryption=mlkem768x25519plus.native.0rtt.vmP9iWcIh2wAc9K7g2WX9IGeT8gtI9GVl7lOAt721hc&flow=xtls-rprx-vision&security=tls&sni=test.example&fp=chrome&alpn=h3%2Ch2&ech=resolver.example%2Bhttps%3A%2F%2Fdns.example%2Fdns-query&type=xhttp&host=test.example&path=%2Fconnect&mode=stream-one&extra=%7B%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingPlacement%22%3A%22cookie%22%2C%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%7D%7D#modern";
+
+        var server = (VLESSServer)V2rayUtils.ParseVUri(link).Single();
+
+        Assert.AreEqual("mlkem768x25519plus.native.0rtt.vmP9iWcIh2wAc9K7g2WX9IGeT8gtI9GVl7lOAt721hc", server.EncryptMethod);
+        Assert.AreEqual("xtls-rprx-vision", server.Flow);
+        Assert.AreEqual("h3,h2", server.TlsAlpn);
+        Assert.AreEqual("resolver.example+https://dns.example/dns-query", server.EchConfigList);
+        Assert.AreEqual("{\"xPaddingObfsMode\":true,\"xPaddingPlacement\":\"cookie\",\"xmux\":{\"maxConcurrency\":\"16-32\"}}", server.XHttpExtra);
+
+        var config = await V2rayConfigUtils.GenerateClientConfigAsync(server);
+        await AssertXrayAcceptsConfigAsync(config);
+        var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
+        using var document = JsonDocument.Parse(json);
+        var outbound = document.RootElement.GetProperty("outbounds")[0];
+        var streamSettings = outbound.GetProperty("streamSettings");
+        var tlsSettings = streamSettings.GetProperty("tlsSettings");
+        var xhttpSettings = streamSettings.GetProperty("xhttpSettings");
+
+        Assert.AreEqual("xhttp", streamSettings.GetProperty("network").GetString());
+        Assert.IsFalse(streamSettings.TryGetProperty("method", out _));
+        Assert.AreEqual("tls", streamSettings.GetProperty("security").GetString());
+        CollectionAssert.AreEqual(new[] { "h3", "h2" }, tlsSettings.GetProperty("alpn").EnumerateArray().Select(value => value.GetString()).ToArray());
+        Assert.AreEqual("resolver.example+https://dns.example/dns-query", tlsSettings.GetProperty("echConfigList").GetString());
+        Assert.IsTrue(xhttpSettings.GetProperty("extra").GetProperty("xPaddingObfsMode").GetBoolean());
+        Assert.AreEqual("cookie", xhttpSettings.GetProperty("extra").GetProperty("xPaddingPlacement").GetString());
+        Assert.AreEqual("16-32", xhttpSettings.GetProperty("extra").GetProperty("xmux").GetProperty("maxConcurrency").GetString());
+        Assert.AreEqual(server.Flow, outbound.GetProperty("settings").GetProperty("vnext")[0].GetProperty("users")[0].GetProperty("flow").GetString());
+
+        var roundTripped = (VLESSServer)V2rayUtils.ParseVUri(V2rayUtils.GetVShareLink(server, "vless")).Single();
+        Assert.AreEqual(server.XHttpExtra, roundTripped.XHttpExtra);
+        Assert.AreEqual(server.TlsAlpn, roundTripped.TlsAlpn);
+        Assert.AreEqual(server.EchConfigList, roundTripped.EchConfigList);
+    }
+
+    [TestMethod]
+    public async Task VlessRealityXhttpLinkUsesTheXrayNetworkFieldAsync()
+    {
+        const string link = "vless://b831381d-6324-4d53-ad4f-8cda48b30811@127.0.0.1:443?encryption=none&security=reality&sni=updates.example&fp=chrome&pbk=KY0BUwLQRU4IGx0k_QahHxuWeLX1Y5ZdIZklLgryPnM&sid=9f&type=xhttp&host=updates.example&path=%2Fouter&mode=auto&extra=%7B%22path%22%3A%22%2Finner%22%2C%22mode%22%3A%22auto%22%2C%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%7D%7D#reality";
+
+        var server = (VLESSServer)V2rayUtils.ParseVUri(link).Single();
+        var config = await V2rayConfigUtils.GenerateClientConfigAsync(server);
+        await AssertXrayAcceptsConfigAsync(config);
+        var json = JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions());
+        using var document = JsonDocument.Parse(json);
+        var streamSettings = document.RootElement.GetProperty("outbounds")[0].GetProperty("streamSettings");
+
+        Assert.AreEqual("xhttp", streamSettings.GetProperty("network").GetString());
+        Assert.IsFalse(streamSettings.TryGetProperty("method", out _));
+        Assert.AreEqual("reality", streamSettings.GetProperty("security").GetString());
+        Assert.AreEqual("updates.example", streamSettings.GetProperty("realitySettings").GetProperty("serverName").GetString());
+        Assert.AreEqual("KY0BUwLQRU4IGx0k_QahHxuWeLX1Y5ZdIZklLgryPnM", streamSettings.GetProperty("realitySettings").GetProperty("password").GetString());
+        Assert.AreEqual("/outer", streamSettings.GetProperty("xhttpSettings").GetProperty("path").GetString());
+        Assert.AreEqual("/inner", streamSettings.GetProperty("xhttpSettings").GetProperty("extra").GetProperty("path").GetString());
+    }
+
+    [TestMethod]
     public async Task XrayXhttpConfigUsesTheConfiguredModeAsync()
     {
         var server = new VLESSServer
@@ -266,7 +325,8 @@ public class Global
         using var document = JsonDocument.Parse(json);
         var streamSettings = document.RootElement.GetProperty("outbounds")[0].GetProperty("streamSettings");
 
-        Assert.AreEqual("xhttp", streamSettings.GetProperty("method").GetString());
+        Assert.AreEqual("xhttp", streamSettings.GetProperty("network").GetString());
+        Assert.IsFalse(streamSettings.TryGetProperty("method", out _));
         Assert.AreEqual("tls", streamSettings.GetProperty("security").GetString());
         Assert.AreEqual("stream-one", streamSettings.GetProperty("xhttpSettings").GetProperty("mode").GetString());
     }
@@ -460,6 +520,38 @@ public class Global
         Assert.AreEqual("current", settings.Server.Single().Remark);
         Assert.AreEqual(1, settings.Profiles.Count);
         Assert.AreEqual("current", settings.Profiles.Single().ServerRemark);
+    }
+
+    private static async Task AssertXrayAcceptsConfigAsync(NetchX.Servers.V2rayConfig config)
+    {
+        var binary = FindWorkspaceFile("Other", "xray", "xray.exe");
+        if (binary == null)
+            return;
+
+        var configPath = Path.Combine(Path.GetTempPath(), $"netchx-xray-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, NetchX.Global.NewCustomJsonSerializerOptions()));
+            var startInfo = new ProcessStartInfo(binary)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            startInfo.ArgumentList.Add("run");
+            startInfo.ArgumentList.Add("-test");
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add(configPath);
+
+            using var process = Process.Start(startInfo)!;
+            await process.WaitForExitAsync();
+            var output = await process.StandardOutput.ReadToEndAsync() + await process.StandardError.ReadToEndAsync();
+            Assert.AreEqual(0, process.ExitCode, $"Xray rejected generated configuration: {output}");
+        }
+        finally
+        {
+            File.Delete(configPath);
+        }
     }
 
     private static string FindWorkspaceFile(params string[] pathParts)

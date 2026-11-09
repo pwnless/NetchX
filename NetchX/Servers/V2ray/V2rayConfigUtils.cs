@@ -189,7 +189,7 @@ public static class V2rayConfigUtils
 
                 outbound.streamSettings = new StreamSettings
                 {
-                    method = "raw",
+                    network = "raw",
                     security = NormalizeSecurity(trojan.TLSSecureType, false)
                 };
                 if (outbound.streamSettings.security == "tls")
@@ -247,7 +247,7 @@ public static class V2rayConfigUtils
                 {
                     outbound.streamSettings = new StreamSettings
                     {
-                        method = "raw",
+                        network = "raw",
                         security = "tls",
                         tlsSettings = BuildTlsSettings(http.ServerName.ValueOrDefault() ?? http.Hostname, http.UTLSFingerprint)
                     };
@@ -263,19 +263,19 @@ public static class V2rayConfigUtils
 
     private static StreamSettings boundStreamSettings(VMessServer server)
     {
-        var method = NormalizeTransport(server.TransferProtocol);
+        var network = NormalizeTransport(server.TransferProtocol);
         var isVless = server is VLESSServer;
         var security = NormalizeSecurity(server.TLSSecureType, isVless);
 
-        if (server is VLESSServer vless && !string.IsNullOrEmpty(GetVlessFlow(vless)))
+        if (server is VLESSServer vless && !string.IsNullOrEmpty(GetVlessFlow(vless)) &&
+            !SupportsVisionWithTransport(vless, network, security))
         {
-            if (method != "raw" || security is not ("tls" or "reality"))
-                throw new MessageException("XTLS Vision requires VLESS over raw transport with TLS or REALITY security in Xray-core.");
+            throw new MessageException("XTLS Vision requires VLESS over raw transport with TLS or REALITY security unless VLESS Encryption is configured.");
         }
 
         var streamSettings = new StreamSettings
         {
-            method = method,
+            network = network,
             security = security
         };
 
@@ -283,11 +283,13 @@ public static class V2rayConfigUtils
         {
             streamSettings.tlsSettings = BuildTlsSettings(
                 server.ServerName.ValueOrDefault() ?? server.Host.SplitOrDefault()?[0],
-                server.RealityFingerprint);
+                server.RealityFingerprint,
+                server.TlsAlpn,
+                server.EchConfigList);
         }
         else if (security == "reality")
         {
-            if (method is not ("raw" or "xhttp" or "grpc"))
+            if (network is not ("raw" or "xhttp" or "grpc"))
                 throw new MessageException("REALITY only supports raw, xhttp, or grpc transport in Xray-core.");
 
             if (string.IsNullOrWhiteSpace(server.RealityPublicKey))
@@ -304,7 +306,7 @@ public static class V2rayConfigUtils
             };
         }
 
-        switch (method)
+        switch (network)
         {
             case "raw":
                 streamSettings.rawSettings = new TcpSettings
@@ -365,7 +367,8 @@ public static class V2rayConfigUtils
                 {
                     host = server.Host.ValueOrDefault() ?? string.Empty,
                     path = server.Path.ValueOrDefault() ?? "/",
-                    mode = string.IsNullOrWhiteSpace(server.XHttpMode) ? "auto" : server.XHttpMode
+                    mode = string.IsNullOrWhiteSpace(server.XHttpMode) ? "auto" : server.XHttpMode,
+                    extra = ParseJsonObject(server.XHttpExtra, "XHTTP extra")
                 };
 
                 break;
@@ -409,7 +412,19 @@ public static class V2rayConfigUtils
         return streamSettings;
     }
 
-    private static TlsSettings BuildTlsSettings(string? serverName, string? fingerprint = null)
+    private static bool SupportsVisionWithTransport(VLESSServer server, string network, string security)
+    {
+        if (network == "raw" && security is "tls" or "reality")
+            return true;
+
+        // VLESS Encryption provides Vision's encryption layer independently
+        // of the underlying transport. Current Xray-core can therefore use a
+        // Vision flow with XHTTP and other current transports in this mode.
+        return !string.IsNullOrWhiteSpace(server.EncryptMethod) &&
+               !server.EncryptMethod.Equals("none", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TlsSettings BuildTlsSettings(string? serverName, string? fingerprint = null, string? alpn = null, string? echConfigList = null)
     {
         return new TlsSettings
         {
@@ -417,7 +432,9 @@ public static class V2rayConfigUtils
             // normal certificate validation for every TLS outbound.
             allowInsecure = null,
             serverName = serverName ?? string.Empty,
-            fingerprint = string.IsNullOrWhiteSpace(fingerprint) ? "chrome" : fingerprint
+            fingerprint = string.IsNullOrWhiteSpace(fingerprint) ? "chrome" : fingerprint,
+            alpn = SplitAlpn(alpn),
+            echConfigList = string.IsNullOrWhiteSpace(echConfigList) ? null : echConfigList
         };
     }
 
@@ -474,7 +491,7 @@ public static class V2rayConfigUtils
         }
         return uuid.GenerateUUIDv5();
     }
-    private static object? ParseHttpHeaders(string? json)
+    private static object? ParseJsonObject(string? json, string settingName)
     {
         if (string.IsNullOrWhiteSpace(json))
             return null;
@@ -488,8 +505,19 @@ public static class V2rayConfigUtils
         }
         catch (JsonException)
         {
-            throw new MessageException("HTTP proxy headers must be a JSON object.");
+            throw new MessageException($"{settingName} must be a JSON object.");
         }
+    }
+
+    private static string[]? SplitAlpn(string? alpn)
+    {
+        var values = alpn?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return values is { Length: > 0 } ? values : null;
+    }
+
+    private static object? ParseHttpHeaders(string? json)
+    {
+        return ParseJsonObject(json, "HTTP proxy headers");
     }
 
 }

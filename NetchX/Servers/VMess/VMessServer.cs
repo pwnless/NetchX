@@ -122,6 +122,22 @@ public class VMessServer : Server
     public string XHttpMode { get; set; } = "auto";
 
     /// <summary>
+    ///     Optional XHTTP extension settings from the standard URI <c>extra</c> parameter.
+    ///     The value must be a JSON object when the Xray configuration is generated.
+    /// </summary>
+    public string XHttpExtra { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     TLS ALPN protocols from the standard URI <c>alpn</c> parameter, stored as a comma-separated value.
+    /// </summary>
+    public string TlsAlpn { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     TLS ECH configuration from the standard URI <c>ech</c> parameter.
+    /// </summary>
+    public string EchConfigList { get; set; } = string.Empty;
+
+    /// <summary>
     ///     Hysteria 2 authentication value when used as an Xray transport.
     /// </summary>
     public string HysteriaAuth { get; set; } = string.Empty;

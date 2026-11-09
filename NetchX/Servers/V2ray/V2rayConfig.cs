@@ -104,7 +104,12 @@ public class Mux
 
 public class StreamSettings
 {
-    public string method { get; set; }
+    /// <summary>
+    ///     Xray stream transport. Xray's JSON schema names this <c>network</c>;
+    ///     an unknown <c>method</c> property is ignored and silently falls back
+    ///     to TCP.
+    /// </summary>
+    public string network { get; set; }
 
     public string security { get; set; }
 
@@ -138,6 +143,10 @@ public class TlsSettings
     public string serverName { get; set; }
 
     public string fingerprint { get; set; }
+
+    public string[] alpn { get; set; }
+
+    public string echConfigList { get; set; }
 }
 
 public class RealitySettings
@@ -204,6 +213,8 @@ public class XHttpSettings
     public string path { get; set; }
 
     public string mode { get; set; }
+
+    public object extra { get; set; }
 }
 
 public class HttpUpgradeSettings

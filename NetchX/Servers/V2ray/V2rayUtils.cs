@@ -34,6 +34,7 @@ public static class V2rayUtils
                     server.Path = Uri.UnescapeDataString(parameter.Get("path") ?? "/");
                     server.Host = Uri.UnescapeDataString(parameter.Get("host") ?? "");
                     server.XHttpMode = parameter.Get("mode") ?? "auto";
+                    server.XHttpExtra = parameter.Get("extra") ?? string.Empty;
                     break;
                 case "kcp":
                 case "mkcp":
@@ -75,6 +76,8 @@ public static class V2rayUtils
             server.RealityShortId = parameter.Get("sid") ?? "";
             server.RealitySpiderX = parameter.Get("spx") ?? "";
             server.RealityMldsa65Verify = parameter.Get("mldsa65Verify") ?? "";
+            server.TlsAlpn = parameter.Get("alpn") ?? string.Empty;
+            server.EchConfigList = parameter.Get("ech") ?? string.Empty;
 
             if (server is VLESSServer vless)
             {
@@ -118,6 +121,9 @@ public static class V2rayUtils
 
                 if (!string.IsNullOrWhiteSpace(server.XHttpMode) && server.XHttpMode != "auto")
                     parameter.Add("mode", server.XHttpMode);
+
+                if (!string.IsNullOrWhiteSpace(server.XHttpExtra))
+                    parameter.Add("extra", Uri.EscapeDataString(server.XHttpExtra));
 
                 break;
             case "kcp":
@@ -186,6 +192,12 @@ public static class V2rayUtils
 
             if (!string.IsNullOrWhiteSpace(server.RealityFingerprint))
                 parameter.Add("fp", server.RealityFingerprint);
+
+            if (!string.IsNullOrWhiteSpace(server.TlsAlpn))
+                parameter.Add("alpn", Uri.EscapeDataString(server.TlsAlpn));
+
+            if (!string.IsNullOrWhiteSpace(server.EchConfigList))
+                parameter.Add("ech", Uri.EscapeDataString(server.EchConfigList));
 
             if (server.TLSSecureType == "reality")
             {
